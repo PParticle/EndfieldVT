@@ -6,16 +6,17 @@ import QtQuick.Layouts
 // Groups fold with the arrow in front of them. Drag a row to restack it:
 // the row lifts and follows the pointer, the others slide apart where it
 // would land; drop it in the middle of a group to put it inside. Right click
-// deletes (renaming is only in the properties page, so a right click is
-// never a slip of the hand). Caption row as tall as the page title row and
-// on the same line; text on the x = gap column, like the brand and the
-// status bar.
+// copies (also Ctrl+D) or deletes (renaming is only in the properties page,
+// so a right click is never a slip of the hand). Caption row as tall as the
+// page title row and on the same line; text on the x = gap column, like the
+// brand and the status bar.
 Rectangle {
     id: side
     property ListModel model
     property string selectedId
     signal selected(string id)
     signal removeRequested(string id)
+    signal duplicateRequested(string id)
     signal moveRequested(string id, string beforeId, string parentId)
 
     // Folded groups, by uid (not saved: every start shows everything).
@@ -413,6 +414,7 @@ Rectangle {
                 color: entry.text === "删除" ? Theme.danger : Theme.text
             }
         }
+        Action { text: "复制"; onTriggered: side.duplicateRequested(menu.targetId) }
         Action { text: "删除"; onTriggered: side.removeRequested(menu.targetId) }
     }
 }

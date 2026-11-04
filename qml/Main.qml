@@ -171,6 +171,48 @@ AppWindow {
         store.setProperty(index, "groupScale", value)
     }
 
+    // A copy of `id` right above it (drawn on top), in the same group, moved
+    // 16 px down and right so it is not hidden under the original; named
+    // "<name> 副本". A group is copied with all its members. The copy is
+    // selected.
+    // "名称" -> "名称 副本", then "名称 副本 2", 3...: the first free one.
+    // A copy of a copy counts on from the same base name.
+    function copyName(name) {
+        const base = name.replace(/ 副本( \d+)?$/, "")
+        const taken = new Set()
+        for (let i = 0; i < store.count; ++i) taken.add(store.get(i).name)
+        let n = base + " 副本"
+        for (let k = 2; taken.has(n); ++k) n = base + " 副本 " + k
+        return n
+    }
+    function duplicateControl(id) {
+        const from = indexOfId(id)
+        if (from < 0) return
+        const source = store.get(from)
+        let count = 1
+        if (source.kind === "group")
+            while (from + count < store.count && store.get(from + count).parentId === id) ++count
+        const copies = []
+        for (let i = 0; i < count; ++i) copies.push(JSON.parse(JSON.stringify(store.get(from + i))))
+        const groupUid = source.kind + "-" + nextNumber++
+        for (let i = 0; i < copies.length; ++i) {
+            const c = copies[i]
+            if (i === 0) {
+                c.uid = groupUid
+                c.name = copyName(c.name)
+            } else {
+                c.uid = c.kind + "-" + nextNumber++
+                c.parentId = groupUid
+            }
+            // Every row by the same amount: a group's members and its scale
+            // origin (the group's own posX / posY) keep their layout.
+            c.posX += 16
+            c.posY += 16
+        }
+        for (let i = 0; i < copies.length; ++i) store.insert(from + i, copies[i])
+        select(groupUid)
+    }
+
     function rename(id, name) {
         const index = indexOfId(id)
         const trimmed = name.trim()
@@ -419,6 +461,13 @@ AppWindow {
         overlay.enabled = false
     }
 
+    // Ctrl+D: copy the selected control (not while typing in a field).
+    Shortcut {
+        sequence: "Ctrl+D"
+        enabled: root.selectedId !== "" && !(root.activeFocusItem instanceof TextInput)
+        onActivated: root.duplicateControl(root.selectedId)
+    }
+
     // The lead zone ends so that the first label sits on the content column
     // (sidebar + page padding).
     leadWidth: Theme.sidebarW + Theme.pagePad - Theme.gap
@@ -461,6 +510,7 @@ AppWindow {
                 selectedId: root.selectedId
                 onSelected: id => root.select(id)
                 onRemoveRequested: id => root.removeControl(id)
+                onDuplicateRequested: id => root.duplicateControl(id)
                 onMoveRequested: (id, beforeId, parentId) => root.moveControl(id, beforeId, parentId)
             }
             StackLayout {
