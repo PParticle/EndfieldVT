@@ -247,6 +247,41 @@ Rectangle {
                 ]
             }
         }
+        // A bar shows the whole 0..max, or one part of it: three bars at
+        // 0-100, 100-200, 200-300 SP make one cell each.
+        Row_ {
+            label: "进度范围"
+            visible: card.forBar
+            Choice {
+                field: "range"; fallback: "full"
+                model: [{ label: "0 到上限", value: "full" }, { label: "自定范围", value: "part" }]
+            }
+            NumberField {
+                visible: card.field("range", "full") === "part"
+                Layout.leftMargin: Theme.unit
+                from: -100000; to: 100000; unit: "从"
+                value: card.field("rangeFrom", 0)
+                onCommitted: v => card.set("rangeFrom", v)
+            }
+            NumberField {
+                visible: card.field("range", "full") === "part"
+                Layout.leftMargin: Theme.unit
+                from: -100000; to: 100000; unit: "到"
+                value: card.field("rangeTo", 100)
+                onCommitted: v => card.set("rangeTo", v)
+            }
+        }
+        Label {
+            visible: card.forBar && card.field("range", "full") === "part"
+            Layout.fillWidth: true
+            Layout.leftMargin: card.labelW
+            wrapMode: Text.WordWrap
+            color: Theme.textFaint
+            font.pixelSize: Theme.caption
+            text: "第一条条件的数值（技力、HP、剩余秒数…）在这个范围里时按比例填充，低于「从」为空，高于「到」为满。"
+                  + " 当前数值 " + (card.result.value !== undefined ? Math.round(card.result.value * 10) / 10 : "-")
+                  + " → " + Math.round(Math.max(0, Math.min(1, Triggers.barProgress(card.trigger, card.result))) * 100) + "%"
+        }
         Row_ {
             label: "反向"
             visible: card.forBar || (card.effect !== "none" && card.timing === "follow")

@@ -42,11 +42,12 @@ AppWindow {
     // from these; older files get the ones they lack (Main.migrate).
     function defaults(kind) {
         return {
-            // A bar starts as a 长条 (its box is fitted to it on creation).
-            boxWidth: kind === "icon" ? 128 : kind === "bar" ? 240 : 160,
-            boxHeight: kind === "icon" ? 128 : kind === "bar" ? 24 : 56,
-            shape: "square", shapeAngle: 0, iconSize: 84,
-            borderColor: "#f2c94c", borderWidth: 3, borderOpacity: 100,
+            // An icon starts at 64 x 64; a bar as a 长条 (its box is fitted
+            // to it on creation).
+            boxWidth: kind === "icon" ? 64 : kind === "bar" ? 240 : 160,
+            boxHeight: kind === "icon" ? 64 : kind === "bar" ? 24 : 56,
+            shape: "square", shapeAngle: 0, iconSize: 75,
+            borderColor: "#f2c94c", borderWidth: kind === "icon" ? 1.5 : 3, borderOpacity: 100,
             fillColor: "#f2c94c", fillOpacity: 22,
             showTimer: true, showStacks: true,
             // Bars: the frame (border + fill) and the progress drawn over it.
@@ -335,7 +336,10 @@ AppWindow {
         let old = null
         try { old = JSON.parse(c.triggers || "") } catch (e) {}
         // Current shape: { show, list: [{ conditions, ... }] }.
-        if (old && typeof old.show === "string" && c.load === undefined) return c
+        if (old && typeof old.show === "string" && c.load === undefined) {
+            c.triggers = JSON.stringify(upgradeTriggers(old))
+            return c
+        }
         const isOldShape = old && Array.isArray(old.list) && old.list.some(t => t && t.type && !t.condition)
         if (typeof c.load !== "string") {
             const conditions = isOldShape ? old.list.filter(t => t.type !== "always") : []
@@ -353,6 +357,17 @@ AppWindow {
         }
         if (typeof c.load === "string") mergeLoad(c)
         return c
+    }
+    // Since 不比较 exists, an always-true "≥ 0" (HP, SP, charge: never
+    // below 0) was only there to read the value: it says so now. A bar
+    // trigger gets its whole range (the default).
+    function upgradeTriggers(d) {
+        for (const t of d.list || []) {
+            for (const x of t.conditions || [])
+                if (x && x.op === ">=" && Number(x.value) === 0 && ["atb", "ultimate", "hp", "poise"].includes(x.type)) x.op = "any"
+            if (t.range === undefined) { t.range = "full"; t.rangeFrom = 0; t.rangeTo = 100 }
+        }
+        return d
     }
     // The 载入 tab is gone: when a control shows is part of its triggers.
     // A load that was not "always" becomes show "active" with one trigger

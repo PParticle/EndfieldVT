@@ -583,7 +583,7 @@ PageFrame {
                     FieldRow {
                         label: "宽度"
                         NumberField {
-                            from: 0; to: 16; unit: "px"
+                            from: 0; to: 16; decimals: 1; unit: "px"
                             value: editor.value("borderWidth", 3)
                             onCommitted: v => editor.roleChanged("borderWidth", v)
                         }
@@ -810,7 +810,7 @@ PageFrame {
                     FieldRow {
                         label: "宽度"
                         NumberField {
-                            from: 0; to: 16; unit: "px"
+                            from: 0; to: 16; decimals: 1; unit: "px"
                             value: editor.value("borderWidth", 3)
                             onCommitted: v => editor.roleChanged("borderWidth", v)
                         }

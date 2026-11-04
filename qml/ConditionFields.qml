@@ -123,8 +123,8 @@ ColumnLayout {
         label: "计量"
         visible: card.type === "atb"
         Choice {
-            field: "measure"; fallback: "cells"
-            model: [{ label: "技力格数", value: "cells" }, { label: "技力值", value: "sp" }]
+            field: "measure"; fallback: "sp"
+            model: [{ label: "技力值（0–上限）", value: "sp" }, { label: "满格数（0–3 格）", value: "cells" }]
         }
     }
     // ultimate
@@ -187,24 +187,40 @@ ColumnLayout {
         font.pixelSize: Theme.caption
     }
 
-    // threshold: atb, ultimate (value), hp, poise (value)
+    // threshold: atb, ultimate (value), hp, poise (value). "不比较" only
+    // reads the value (for a bar's progress or a text's number).
+    readonly property bool hasThreshold: !valueOnly && (type === "atb" || type === "hp"
+                 || (type === "ultimate" && field("measure", "ready") === "value")
+                 || (type === "poise" && field("show", "broken") === "value"))
     Row_ {
-        label: card.type === "hp" ? "HP 百分比" : card.type === "poise" ? "失衡值百分比"
-             : card.type === "atb" ? (card.field("measure", "cells") === "cells" ? "技力格数" : "技力值") : "充能值"
-        visible: !card.valueOnly && (card.type === "atb" || card.type === "hp"
-                 || (card.type === "ultimate" && card.field("measure", "ready") === "value")
-                 || (card.type === "poise" && card.field("show", "broken") === "value"))
+        label: "比较"
+        visible: card.hasThreshold
         Choice {
-            Layout.preferredWidth: 10 * Theme.unit
+            Layout.preferredWidth: 15 * Theme.unit
             field: "op"; fallback: ">="
             model: Triggers.compareOps
         }
         NumberField {
+            visible: card.field("op", ">=") !== "any"
             Layout.leftMargin: Theme.unit
             from: 0; to: 100000
-            unit: card.type === "hp" || card.type === "poise" ? "%" : ""
+            unit: card.type === "hp" || card.type === "poise" ? "%" : card.type === "atb" && card.field("measure", "sp") === "cells" ? "格" : ""
             value: card.field("value", 0)
             onCommitted: v => card.set("value", v)
+        }
+        Label {
+            Layout.leftMargin: Theme.unit
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            color: Theme.textFaint
+            font.pixelSize: Theme.caption
+            text: card.field("op", ">=") === "any"
+                  ? "只读数值，总是满足：给进度条的进度、文本的数字用"
+                  : card.type === "hp" ? "按 HP 占上限的百分比判断，例：≤ 30% = 残血提示"
+                  : card.type === "poise" ? "按失衡值占上限的百分比判断"
+                  : card.type === "atb" && card.field("measure", "sp") === "cells" ? "按满格数判断（每格 = 技力上限 / 格数），例：≥ 2 格 = 够放两次战技"
+                  : card.type === "atb" ? "按技力值判断，例：≥ 100"
+                  : "按充能值判断"
         }
     }
 

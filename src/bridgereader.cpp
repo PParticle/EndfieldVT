@@ -505,8 +505,11 @@ void BridgeReader::poll()
 namespace {
 
 // Comparison for the threshold triggers.
+// "any": no comparison, the condition only reads the value (a bar's or a
+// text's number); it holds whenever there is data.
 bool Compare(double a, const QString& op, double b)
 {
+    if (op == "any") return true;
     if (op == "<") return a < b;
     if (op == "<=") return a <= b;
     if (op == ">") return a > b;

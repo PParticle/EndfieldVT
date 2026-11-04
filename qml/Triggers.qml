@@ -27,10 +27,10 @@ import QtQuick
 QtObject {
     readonly property var types: [
         { value: "buff", label: "Buff / Debuff", desc: "某个单位身上有（或没有）指定的 Buff" },
-        { value: "atb", label: "技力", desc: "技力或技力格数达到条件" },
+        { value: "atb", label: "技力", desc: "技力值或满格数" },
         { value: "ultimate", label: "终结技充能", desc: "终结技充能达到条件或已充满" },
         { value: "combo", label: "连携技", desc: "释放连携技后的冷却，或冷却完毕" },
-        { value: "hp", label: "HP", desc: "单位的 HP 百分比达到条件" },
+        { value: "hp", label: "HP", desc: "单位的 HP（数值；比较时按百分比）" },
         { value: "poise", label: "失衡", desc: "单位处于失衡，或失衡值达到条件" },
         { value: "lock", label: "锁定目标", desc: "有（或没有）锁定的目标" },
         { value: "combat", label: "战斗状态", desc: "小队在战斗中（或不在）" },
@@ -67,7 +67,7 @@ QtObject {
         { label: "任意小队成员", value: "anySquad" }, { label: "任意敌人", value: "anyEnemy" }
     ])
     readonly property var compareOps: [
-        { label: "≥", value: ">=" }, { label: ">", value: ">" }, { label: "≤", value: "<=" },
+        { label: "不比较", value: "any" }, { label: "≥", value: ">=" }, { label: ">", value: ">" }, { label: "≤", value: "<=" },
         { label: "<", value: "<" }, { label: "=", value: "==" }, { label: "≠", value: "!=" }
     ]
 
@@ -106,9 +106,25 @@ QtObject {
             reverse: type === "combo"
         }
     }
-    // Bars draw their own progress, texts only show or hide: no effect.
+    // Bars draw their own progress, texts only show or hide: no effect. A
+    // bar's number conditions start as "不比较": the bar only needs the value.
     function makeBarTrigger(type) {
-        return { conditions: [makeCondition(type)], mode: "all", effect: "none", timing: "follow", reverse: type === "combo" }
+        const c = makeCondition(type)
+        if (c.op !== undefined) c.op = "any"
+        if (type === "atb") c.measure = "sp"
+        if (type === "ultimate") c.measure = "value"
+        return { conditions: [c], mode: "all", effect: "none", timing: "follow", reverse: type === "combo",
+                 range: "full", rangeFrom: 0, rangeTo: 100 }
+    }
+    // A bar's progress from a trigger's result: the whole 0..max, or a part
+    // of it (rangeFrom..rangeTo, in the value's own units), so several bars
+    // can each show one part (SP cell 1 = 0..100, cell 2 = 100..200...).
+    function barProgress(t, r) {
+        if (t.range === "part") {
+            const span = Number(t.rangeTo) - Number(t.rangeFrom)
+            return span > 0 ? (Number(r.value) - Number(t.rangeFrom)) / span : 0
+        }
+        return r.progress
     }
     function makeTextTrigger(type) {
         return { conditions: [makeCondition(type)], mode: "all", effect: "none", timing: "follow", reverse: false }
@@ -142,7 +158,7 @@ QtObject {
         if (d.list.length === 0) return { progress: 1, text: "", stacks: 0, hidden: false, results: results, driving: -1 }
         for (let i = 0; i < d.list.length; ++i) {
             if (!results[i].active) continue
-            const p = Math.max(0, Math.min(1, results[i].progress))
+            const p = Math.max(0, Math.min(1, barProgress(d.list[i], results[i])))
             return { progress: d.list[i].reverse ? 1 - p : p, text: results[i].text || "",
                      stacks: results[i].stacks || 0, hidden: false, results: results, driving: i }
         }
