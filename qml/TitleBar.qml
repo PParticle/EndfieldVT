@@ -3,13 +3,15 @@ import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
 // Brand on the left (its zone can be given a width so the actions line up
-// with a column below), actions, then minimize / maximize / close.
+// with a column below), actions, trailing items (right aligned), then
+// minimize / maximize / close.
 Rectangle {
     id: bar
 
     property string subtitle
     property int leadWidth: -1      // -1: as wide as the brand needs
     property alias actions: actionRow.data
+    property alias trailing: trailingRow.data
     // The window this bar is in. Pointer handlers are not Items, so they
     // cannot use the Window attached property themselves.
     readonly property var win: Window.window
@@ -75,6 +77,10 @@ Rectangle {
             Layout.fillHeight: true
         }
         Item { Layout.fillWidth: true }
+        Row {
+            id: trailingRow
+            Layout.fillHeight: true
+        }
 
         WindowButton {
             id: minButton

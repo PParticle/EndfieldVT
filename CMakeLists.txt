@@ -39,6 +39,7 @@ qt_add_qml_module(EndfieldVT
         qml/ConditionFields.qml
         qml/ControlView.qml
         qml/OverlayWindow.qml
+        qml/ConfigMenu.qml
 )
 
 # EndfieldDataBridge's public headers: its repository sits next to this one,

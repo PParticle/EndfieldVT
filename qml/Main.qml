@@ -319,13 +319,24 @@ AppWindow {
         c.triggers = JSON.stringify({ show: loadConds.length > 0 ? "active" : "always", list: triggers })
     }
 
-    // ---- default.json: read at start, written shortly after every change.
+    // ---- the config (<name>.json, src/configfile.h): read at start and on
+    // a switch, written shortly after every change.
     function serialize() {
         const controls = []
         for (let i = 0; i < store.count; ++i) controls.push(JSON.parse(JSON.stringify(store.get(i))))
         return JSON.stringify({ version: 1, nextNumber: nextNumber, overlay: overlayOn, controls: controls }, null, 2) + "\n"
     }
+    // An empty config, as a new one starts.
+    function emptyConfig() {
+        return JSON.stringify({ version: 1, nextNumber: 1, overlay: overlayOn, controls: [] }, null, 2) + "\n"
+    }
     function load() {
+        // Nothing is saved while loading; a failed read keeps it that way
+        // until another config is opened, so a broken file is not overwritten.
+        loaded = false
+        selectedId = ""
+        store.clear()
+        nextNumber = 1
         if (!ConfigFile.exists()) {
             loaded = true
             return
@@ -333,17 +344,39 @@ AppWindow {
         const text = ConfigFile.read()
         try {
             const data = JSON.parse(text)
-            store.clear()
-            for (const c of data.controls || []) store.append(migrate(c))
+            if (!data || !Array.isArray(data.controls)) throw new Error("不是 EndfieldVT 的配置（没有 controls）")
+            for (const c of data.controls) store.append(migrate(c))
             for (let i = 0; i < store.count; ++i) if (store.get(i).kind === "bar") fitBarBox(i)
             nextNumber = data.nextNumber || store.count + 1
             overlayOn = data.overlay !== false
             loaded = true
         } catch (e) {
-            // Keep the file as it is: nothing is saved until it is fixed.
-            status.flash("default.json 读取失败，修改不会保存：" + (ConfigFile.lastError || e.message), 0)
+            store.clear()
+            status.flash(ConfigFile.name + ".json 读取失败，修改不会保存：" + (ConfigFile.lastError || e.message), 0)
         }
     }
+    // Saves what is pending in the current config.
+    function flush() {
+        if (!saveTimer.running) return
+        saveTimer.stop()
+        if (loaded && !ConfigFile.write(serialize())) status.flash("保存失败：" + ConfigFile.lastError, 0)
+    }
+    function switchConfig(name) {
+        if (name === ConfigFile.name) return
+        flush()
+        if (!ConfigFile.open(name)) { status.flash(ConfigFile.lastError, 0); return }
+        load()
+        if (loaded) status.flash("已切换到配置「" + name + "」")
+    }
+    // A new config: empty, or a copy of the current one. Opened right away.
+    function createConfig(name, copy) {
+        flush()
+        const text = copy ? serialize() : emptyConfig()
+        if (!ConfigFile.create(name, text)) { status.flash(ConfigFile.lastError, 0); return false }
+        switchConfig(name)
+        return true
+    }
+
     Timer {
         id: saveTimer
         interval: 300
@@ -378,10 +411,7 @@ AppWindow {
     visible: true
     title: "EndfieldVT"
     onClosing: {
-        if (saveTimer.running) {
-            saveTimer.stop()
-            ConfigFile.write(serialize())
-        }
+        flush()
         if (preview) preview.close() // closing the main window quits
         overlay.enabled = false
     }
@@ -391,8 +421,6 @@ AppWindow {
     leadWidth: Theme.sidebarW + Theme.pagePad - Theme.gap
     actions: [
         TitleAction { text: "新建"; checked: root.page === "new"; onClicked: root.togglePage("new") },
-        TitleAction { text: "导入"; onClicked: status.flash("导入：尚未实现") },
-        TitleAction { text: "导出"; onClicked: status.flash("导出：尚未实现") },
         Item {
             width: 2 * Theme.unit + 1
             height: Theme.titleBarH - 1
@@ -407,6 +435,13 @@ AppWindow {
         TitleAction { text: "预览/编辑"; onClicked: root.showPreview() },
         TitleAction { text: "游戏内显示"; checked: root.overlayOn; onClicked: root.overlayOn = !root.overlayOn },
         TitleAction { text: "调试"; checked: root.page === "debug"; onClicked: root.togglePage("debug") }
+    ]
+    trailing: [
+        ConfigMenu {
+            objectName: "configMenu"
+            onSwitchRequested: name => root.switchConfig(name)
+            onCreateRequested: (name, copy) => root.createConfig(name, copy)
+        }
     ]
 
     ColumnLayout {

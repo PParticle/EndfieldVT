@@ -12,6 +12,7 @@ ApplicationWindow {
     property alias subtitle: bar.subtitle
     property alias leadWidth: bar.leadWidth
     property alias actions: bar.actions
+    property alias trailing: bar.trailing
     readonly property bool maximized: visibility === Window.Maximized
     readonly property int frameWidth: maximized ? 0 : 1
 
