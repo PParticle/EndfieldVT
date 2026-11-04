@@ -12,7 +12,8 @@ AppWindow {
     property string page: ""
     property PreviewWindow preview: null
     property string selectedId: ""
-    readonly property int selectedIndex: { store.count; return indexOfId(selectedId) }
+    // Re-read on any model change: a move keeps the count but shifts rows.
+    readonly property int selectedIndex: { storeRevision; return indexOfId(selectedId) }
     property int nextNumber: 1
     property bool loaded: false
     // In-game overlay: on by default; saved with the controls.
@@ -41,16 +42,16 @@ AppWindow {
     // from these; older files get the ones they lack (Main.migrate).
     function defaults(kind) {
         return {
-            // A bar starts as a ring (square box); rect bars are wide and flat.
-            boxWidth: kind === "icon" || kind === "bar" ? 128 : 160,
-            boxHeight: kind === "icon" || kind === "bar" ? 128 : 56,
+            // A bar starts as a 长条 (its box is fitted to it on creation).
+            boxWidth: kind === "icon" ? 128 : kind === "bar" ? 240 : 160,
+            boxHeight: kind === "icon" ? 128 : kind === "bar" ? 24 : 56,
             shape: "square", shapeAngle: 0, iconSize: 84,
             borderColor: "#f2c94c", borderWidth: 3, borderOpacity: 100,
             fillColor: "#f2c94c", fillOpacity: 22,
             showTimer: true, showStacks: true,
             // Bars: the frame (border + fill) and the progress drawn over it.
             // Sizes in design pixels; the box is fitted around the shape.
-            barStyle: "ring", barDirection: "leftToRight", ringGap: 0,
+            barStyle: "rect", barDirection: "leftToRight", ringGap: 0,
             ringOuter: 56, ringInner: 44, barLength: 240, barThickness: 24, barRotation: 0,
             progressColor: "#f2c94c", progressOpacity: 100,
             // Bars: progress eased over barSmooth ms; barSegments cuts the
@@ -249,6 +250,8 @@ AppWindow {
         // in the rest.
         const missing = defaults(c.kind)
         delete missing.triggers
+        // Bars from before 长条 was the default, without a style, were rings.
+        if (c.kind === "bar" && c.barStyle === undefined) c.barStyle = "ring"
         if (c.kind === "text" && c.staticText === undefined) c.staticText = c.name
         // Earlier bars were sized by their box (8 px inset) and a thickness in %.
         if (c.ringOuter === undefined) {

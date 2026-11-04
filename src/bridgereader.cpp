@@ -653,14 +653,20 @@ QVariantMap BridgeReader::evaluate(const QVariantMap& spec) const
     // ---- thresholds: a number against `value`
     const QString op = spec.value("op", ">=").toString();
     const double threshold = spec.value("value", 0).toDouble();
-    const auto threshold_ = [&](double v, double max, const QString& what, const QString& shown) {
-        QVariantMap r = Result(true, Compare(v, op, threshold), max > 0 ? v / max : 0,
-                               QString("%1 %2").arg(what, shown));
+    const auto whole = [](double v) { return QString::number(v, 'f', 0); };
+    // `value` / `max` are the real numbers (HP 5595 / 5950); `compared` is
+    // what the threshold is judged on (HP and poise: their percentage).
+    // `note` is for the editor; the shown text is the bare number.
+    const auto threshold_ = [&](double v, double max, const QString& what, const QString& note, double compared,
+                                const QString& shown) {
+        QVariantMap r = Result(true, Compare(compared, op, threshold), max > 0 ? v / max : 0,
+                               QString("%1 %2").arg(what, note));
         r["value"] = v;
         r["max"] = max;
         r["text"] = shown;
         return r;
     };
+
 
     if (type == "atb") {
         if (!m_team.value("valid").toBool()) return Result(false, false, 0, "无技力数据");
@@ -669,11 +675,11 @@ QVariantMap BridgeReader::evaluate(const QVariantMap& spec) const
         // Measured in cells when asked and known; otherwise in SP.
         if (spec.value("measure", "sp").toString() == "cells" && perCell > 0) {
             const double cells = std::floor(atb / perCell);
-            QVariantMap r = threshold_(cells, max / perCell, "技力", QString("%1 格").arg(cells));
+            QVariantMap r = threshold_(cells, std::floor(max / perCell), "技力", QString("%1 格").arg(cells), cells, whole(cells));
             r["stacks"] = int(cells);
             return r;
         }
-        return threshold_(atb, max, "技力", QString::number(atb, 'f', 0));
+        return threshold_(atb, max, "技力", whole(atb), atb, whole(atb));
     }
 
     // Squad member values.
@@ -691,7 +697,7 @@ QVariantMap BridgeReader::evaluate(const QVariantMap& spec) const
                 r["text"] = QString::number(v, 'f', 0);
                 return r;
             }
-            return threshold_(v, max, "终结技", QString::number(v, 'f', 0));
+            return threshold_(v, max, "终结技", whole(v), v, whole(v));
         }
         if (!op_.value("hasCombo").toBool()) return Result(false, false, 0, "该干员没有连携技");
         const double left = op_.value("comboLeft").toDouble(), cd = op_.value("comboCooldown").toDouble();
@@ -716,9 +722,9 @@ QVariantMap BridgeReader::evaluate(const QVariantMap& spec) const
             return Result(false, false, 0, unit == "target" ? "没有锁定目标" : "没有该单位的数据");
         if (type == "hp") {
             const double hp = u.value("hp").toDouble(), max = u.value("hpMax").toDouble();
-            // HP is compared in percent: "HP below 30%".
+            // HP is compared in percent ("HP below 30%"), shown as the number.
             const double pct = max > 0 ? hp / max * 100 : 0;
-            return threshold_(pct, 100, "HP", QString("%1%").arg(pct, 0, 'f', 0));
+            return threshold_(hp, max, "HP", QString("%1 / %2（%3%）").arg(whole(hp), whole(max), whole(pct)), pct, whole(hp));
         }
         if (!u.value("hasPoise").toBool()) return Result(false, false, 0, "该单位没有失衡条");
         const QString show = spec.value("show", "broken").toString();
@@ -735,7 +741,7 @@ QVariantMap BridgeReader::evaluate(const QVariantMap& spec) const
         }
         const double poise = u.value("poise").toDouble(), max = u.value("poiseMax").toDouble();
         const double pct = max > 0 ? poise / max * 100 : 0;
-        return threshold_(pct, 100, "失衡值", QString("%1%").arg(pct, 0, 'f', 0));
+        return threshold_(poise, max, "失衡值", QString("%1 / %2（%3%）").arg(whole(poise), whole(max), whole(pct)), pct, whole(poise));
     }
 
     // In combat: the game's own flag (BattleManager.m_isSquadInFight, Bridge

@@ -170,7 +170,7 @@ QtObject {
     readonly property var textTypes: types.filter(t => !["always", "lock", "combat"].includes(t.value))
     readonly property var textShows: [
         { label: "自动（剩余时间、技力等）", value: "auto" }, { label: "数值", value: "value" },
-        { label: "数值 / 最大值", value: "ratio" }, { label: "百分比", value: "percent" },
+        { label: "数值 / 上限", value: "ratio" }, { label: "百分比", value: "percent" },
         { label: "层数", value: "stacks" }
     ]
     function makeTextSource(type) {

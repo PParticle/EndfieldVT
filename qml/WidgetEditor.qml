@@ -617,14 +617,14 @@ PageFrame {
                     visible: editor.kind === "bar" && editor.tabName === "外观"
                     width: parent.width
                     spacing: Theme.unit
-                    readonly property bool ring: editor.value("barStyle", "ring") === "ring"
+                    readonly property bool ring: editor.value("barStyle", "rect") === "ring"
 
                     Section { text: "类型"; Layout.topMargin: 0 }
                     FieldRow {
                         label: "形状"
                         Choice {
-                            role: "barStyle"; fallback: "ring"
-                            model: [{ label: "圆环", value: "ring" }, { label: "长方形", value: "rect" }]
+                            role: "barStyle"; fallback: "rect"
+                            model: [{ label: "长条", value: "rect" }, { label: "圆环", value: "ring" }]
                         }
                         Label {
                             Layout.leftMargin: Theme.gap
@@ -634,6 +634,7 @@ PageFrame {
                         }
                         NumberField {
                             from: 0; to: 359; unit: "°"
+                            objectName: "barRotation"
                             value: editor.value("barRotation", 0)
                             onCommitted: v => editor.roleChanged("barRotation", v)
                         }
@@ -679,6 +680,7 @@ PageFrame {
                         label: "长度"
                         NumberField {
                             from: 4; to: 1280; unit: "px"
+                            objectName: "barLength"
                             value: editor.value("barLength", 240)
                             onCommitted: v => editor.roleChanged("barLength", v)
                         }
@@ -690,6 +692,7 @@ PageFrame {
                         }
                         NumberField {
                             from: 2; to: 720; unit: "px"
+                            objectName: "barThickness"
                             value: editor.value("barThickness", 24)
                             onCommitted: v => editor.roleChanged("barThickness", v)
                         }
@@ -908,7 +911,7 @@ PageFrame {
                     Hint {
                         visible: textContentTab.mode !== "static"
                         Layout.leftMargin: editor.labelW
-                        text: "自动：Buff / 技能 / 连携技显示剩余秒数，技力、终结技显示数值，HP、失衡显示百分比。数值：剩余秒数或当前值。"
+                        text: "自动和数值：Buff / 技能 / 连携技是剩余秒数，其余是当前值（HP 5595、技力 237）。数值 / 上限：5595 / 5950。只有「百分比」显示 94%。"
                     }
                     FieldRow {
                         visible: textContentTab.mode !== "static"
