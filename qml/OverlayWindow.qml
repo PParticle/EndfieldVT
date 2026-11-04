@@ -9,6 +9,7 @@ Window {
     id: overlay
     property ListModel model
     property var groups: ({})
+    property var groupStates: ({})
     property alias showInBackground: tracker.showInBackground
     property alias enabled: tracker.enabled
     readonly property alias tracker: tracker
@@ -42,6 +43,7 @@ Window {
             delegate: ControlView {
                 designScale: canvas.designScale
                 groups: overlay.groups
+                groupStates: overlay.groupStates
                 live: true
                 count: overlay.model ? overlay.model.count : 0
             }

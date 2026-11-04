@@ -11,6 +11,8 @@ Item {
     property real designScale: 1   // not `scale`: that is Item's own transform
     // Main.groups: each group's scale, opacity and scale origin, by uid.
     property var groups: ({})
+    // Main.groupStates: what each group's triggers say now, by uid.
+    property var groupStates: ({})
     // The preview window: a selected group shows its frame and can be dragged.
     property bool editing: false
     property bool live: true
@@ -89,16 +91,22 @@ Item {
     // Animations need frames between bridge reads.
     FrameAnimation { running: object.state.playing === true; onTriggered: object.runState = object.runState }
     readonly property bool follows: live && usesTriggers
-    readonly property bool shown: !follows || state.hidden !== true || selected
-    // Hidden by its triggers, but selected: drawn faint so it can be found.
-    // Bars' state has no effect / angle / hidden: default each.
-    readonly property bool ghost: follows && state.hidden === true
-    readonly property string drawEffect: follows ? (state.effect || "none") : "none"
-    readonly property real drawProgress: follows ? state.progress : 1
-    readonly property real drawStart: follows ? (Number(state.startAngle) || 0) : 0
-    readonly property string drawSpread: follows ? (state.spread || "overlay") : "overlay"
-    readonly property string drawSpreadColor: follows ? (state.spreadColor || "#ffffff") : "#ffffff"
-    readonly property real drawSpreadOpacity: follows && state.spreadOpacity !== undefined ? state.spreadOpacity : 70
+    // The group's triggers, for a member: they can hide it, and an icon with
+    // no active effect of its own plays the group's.
+    readonly property var groupState: follows && parentId !== "" ? groupStates[parentId] || null : null
+    readonly property bool hiddenNow: state.hidden === true || (groupState !== null && groupState.hidden === true)
+    readonly property bool shown: !follows || !hiddenNow || selected
+    // Hidden by triggers, but selected: drawn faint so it can be found.
+    readonly property bool ghost: follows && hiddenNow
+    // Where the effect comes from. Bars' state has no effect / angle: default each.
+    readonly property var fx: kind === "icon" && (state.effect || "none") === "none" && groupState !== null
+                              && (groupState.effect || "none") !== "none" ? groupState : state
+    readonly property string drawEffect: follows ? (fx.effect || "none") : "none"
+    readonly property real drawProgress: follows ? fx.progress : 1
+    readonly property real drawStart: follows ? (Number(fx.startAngle) || 0) : 0
+    readonly property string drawSpread: follows ? (fx.spread || "overlay") : "overlay"
+    readonly property string drawSpreadColor: follows ? (fx.spreadColor || "#ffffff") : "#ffffff"
+    readonly property real drawSpreadOpacity: follows && fx.spreadOpacity !== undefined ? fx.spreadOpacity : 70
     // A group draws only its frame (its members' bounds, Main.groups), in
     // the preview, while selected.
     readonly property bool isGroup: kind === "group"

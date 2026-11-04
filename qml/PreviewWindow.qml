@@ -8,6 +8,7 @@ AppWindow {
     id: preview
     property ListModel model
     property var groups: ({})
+    property var groupStates: ({})
     property string selectedId
     signal selected(string id)
     signal moved(string id, real x, real y)
@@ -104,6 +105,7 @@ AppWindow {
                     id: object
                     designScale: canvas.designScale
                     groups: preview.groups
+                groupStates: preview.groupStates
                     editing: true
                     live: preview.live
                     selected: preview.selectedId === uid

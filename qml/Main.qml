@@ -134,6 +134,31 @@ AppWindow {
         }
         return out
     }
+    // Each group's triggers, run once per bridge read (and every frame while
+    // one plays): Triggers.run() results by group uid. Members read them
+    // (ControlView.groupState); nothing is written into the members.
+    property var groupStates: ({})
+    property var groupRun: ({})          // Triggers.run()'s per-group memory
+    property bool groupPlaying: false
+    function updateGroupStates() {
+        const now = Date.now()
+        const out = {}, run = {}
+        let playing = false
+        for (let i = 0; i < store.count; ++i) {
+            const c = store.get(i)
+            if (c.kind !== "group") continue
+            run[c.uid] = groupRun[c.uid] || {}
+            out[c.uid] = Triggers.run(BridgeReader, c.triggers, run[c.uid], now)
+            playing = playing || out[c.uid].playing
+        }
+        groupRun = run
+        groupStates = out
+        groupPlaying = playing
+    }
+    Connections { target: BridgeReader; function onTicked() { root.updateGroupStates() } }
+    FrameAnimation { running: root.groupPlaying; onTriggered: root.updateGroupStates() }
+    onStoreRevisionChanged: updateGroupStates()
+
     Connections {
         target: store
         function onDataChanged() { root.storeRevision++ }
@@ -534,6 +559,7 @@ AppWindow {
                     onRenameRequested: name => root.rename(root.selectedId, name)
                     onRoleChanged: (role, value) => root.setRole(root.selectedId, role, value)
                     groups: root.groups
+                    groupStates: root.groupStates
                     onGroupMoveRequested: (x, y) => root.moveGroup(root.selectedId, x, y)
                 }
             }
@@ -552,6 +578,7 @@ AppWindow {
         id: overlay
         model: store
         groups: root.groups
+        groupStates: root.groupStates
         enabled: root.overlayOn
     }
 
@@ -560,6 +587,7 @@ AppWindow {
         PreviewWindow {
             model: store
             groups: root.groups
+            groupStates: root.groupStates
             selectedId: root.selectedId
             onGroupMoved: (id, x, y) => root.moveGroup(id, x, y)
             onSelected: id => root.select(id)

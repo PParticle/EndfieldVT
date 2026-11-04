@@ -15,6 +15,9 @@ PageFrame {
     signal groupMoveRequested(real x, real y)
     // Main.groups: for a selected group, its members' bounds.
     property var groups: ({})
+    // Main.groupStates: a member's group decides with it.
+    property var groupStates: ({})
+    readonly property var parentState: { const p = value("parentId", ""); return p !== "" ? groupStates[p] || null : null }
     readonly property var groupInfo: kind === "group" ? groups[value("uid", "")] || null : null
 
     // model.get() is a snapshot; bumping `revision` on any model change makes
@@ -34,7 +37,7 @@ PageFrame {
     function value(role, fallback) { return row && row[role] !== undefined ? row[role] : fallback }
 
     readonly property string kind: value("kind", "")
-    readonly property bool tabbed: kind === "icon" || kind === "bar" || kind === "text"
+    readonly property bool tabbed: kind !== ""
     readonly property var kindNames: ({ icon: "图标", bar: "进度条", text: "文本", group: "组" })
     readonly property int labelW: 14 * Theme.unit
     property int tab: 0
@@ -83,7 +86,8 @@ PageFrame {
              : Triggers.run(BridgeReader, value("triggers", ""), runState, Date.now())
     }
     // Tab names per kind; `tab` indexes into them.
-    readonly property var tabNames: kind === "text" ? ["内容", "触发器", "外观"] : ["触发器", "外观"]
+    readonly property var tabNames: kind === "text" ? ["内容", "触发器", "外观"] : kind === "group" ? ["触发器", "整体"]
+                                                                                 : ["触发器", "外观"]
     readonly property string tabName: tabNames[tab] || ""
     readonly property var textSource: Triggers.parseTextSource(value("textSource", ""))
     function setTextSource(field, v) {
@@ -319,9 +323,14 @@ PageFrame {
             // Loaded, and which trigger drives it.
             Label {
                 visible: editor.tabbed
-                readonly property bool hidden: editor.triggerState.hidden === true
+                readonly property bool byGroup: editor.parentState !== null && editor.parentState.hidden === true
+                readonly property bool hidden: editor.triggerState.hidden === true || byGroup
                                                || (editor.kind === "text" && editor.textState.hidden)
-                text: hidden ? "○ 当前不显示"
+                text: byGroup ? "○ 当前不显示（组的触发器）"
+                    : hidden ? (editor.kind === "group" ? "○ 当前整组隐藏" : "○ 当前不显示")
+                    : editor.kind === "group"
+                      ? (editor.triggerState.driving >= 0 ? "● 组触发器 " + (editor.triggerState.driving + 1) + "：" + Triggers.effectLabel(editor.triggerState.effect)
+                                                         : "● 组内控件按各自的触发器显示")
                     : editor.kind === "text" ? "● 显示：" + editor.textState.text
                     : editor.kind === "bar"
                       ? (editor.triggerState.driving >= 0
@@ -420,7 +429,10 @@ PageFrame {
                     }
                     Hint {
                         Layout.leftMargin: editor.labelW
-                        text: editor.triggers.show === "always"
+                        text: editor.kind === "group"
+                              ? (editor.triggers.show === "always" ? "组内控件照常显示；满足的组触发器把效果加到它们上面。"
+                                                                   : "没有组触发器满足时，整组隐藏。例：战斗状态 = 战斗中 → 只在战斗时显示这一组。")
+                              : editor.triggers.show === "always"
                               ? "控件一直按外观显示；满足的触发器在上面播放效果。"
                               : "没有触发器满足时整个控件隐藏。例：连携技冷却完毕 + 中心扩散（图标本身从无变大）+ 播放一次 + 播放完消失 = 冷却转好时从无扩散出来，播完消失。"
                     }
@@ -430,7 +442,9 @@ PageFrame {
                         spacing: Theme.unit
                         Label {
                             text: editor.triggers.list.length === 0
-                                  ? (editor.kind === "bar" ? "没有触发器：显示为满" : "没有触发器：按外观静态显示")
+                                  ? (editor.kind === "bar" ? "没有触发器：显示为满"
+                                   : editor.kind === "group" ? "没有触发器：组内控件按各自的触发器显示"
+                                   : "没有触发器：按外观静态显示")
                                   : "触发器"
                             color: Theme.textDim
                         }
@@ -478,6 +492,14 @@ PageFrame {
                         font.pixelSize: Theme.caption
                         visible: editor.triggers.list.length > 0 && editor.kind === "icon"
                         text: "按顺序检查：第一个满足、且设了效果的触发器驱动图标（标黄的那个）。例：连携技 + 顺时针填充 = 连携技冷却转圈；终结技充满 + 中心扩散（图标本身从无变大）+ 播放一次 = 充满时的提示动画。"
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        color: Theme.textFaint
+                        font.pixelSize: Theme.caption
+                        visible: editor.kind === "group"
+                        text: "组的触发器作用于组里的每个控件，不改它们自己的设置：选「只在有触发器满足时显示」，没有满足时整组隐藏（成员自己的触发器照常生效，两者都允许才显示）；设了效果的触发器满足时，组里没有自己效果在播的图标播放组的效果。控件移出组就不再受影响。"
                     }
                     Label {
                         Layout.fillWidth: true
@@ -1014,7 +1036,7 @@ PageFrame {
                 // ---- group
                 ColumnLayout {
                     id: groupTab
-                    visible: editor.kind === "group"
+                    visible: editor.kind === "group" && editor.tabName === "整体"
                     width: parent.width
                     spacing: Theme.unit
                     readonly property var g: editor.groupInfo
