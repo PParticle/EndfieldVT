@@ -56,8 +56,16 @@ PageFrame {
 
     // ---- triggers, kept as JSON in their role (qml/Triggers.qml)
     readonly property var triggers: Triggers.parseTriggers(value("triggers", ""))
-    function saveTriggers(list, show) {
-        roleChanged("triggers", JSON.stringify({ show: show !== undefined ? show : triggers.show, list: list }))
+    function saveTriggers(list, show, motion) {
+        const out = { show: show !== undefined ? show : triggers.show, list: list }
+        const m = motion !== undefined ? motion : triggers.motion
+        if (Triggers.hasMotion(m)) out.motion = m
+        roleChanged("triggers", JSON.stringify(out))
+    }
+    function setMotion(field, v) {
+        const m = Object.assign({}, triggers.motion)
+        m[field] = v
+        saveTriggers(triggers.list, undefined, m)
     }
     function addTrigger(type) {
         const t = kind === "bar" ? Triggers.makeBarTrigger(type) : kind === "text" || kind === "buffs" ? Triggers.makeTextTrigger(type)
@@ -458,6 +466,56 @@ PageFrame {
                               : editor.triggers.show === "always"
                               ? "控件一直按外观显示；满足的触发器在上面播放效果。"
                               : "没有触发器满足时整个控件隐藏。例：连携技冷却完毕 + 中心扩散（图标本身从无变大）+ 播放一次 + 播放完消失 = 冷却转好时从无扩散出来，播完消失。"
+                    }
+                    // How it comes and goes when the triggers show / hide it.
+                    component MotionBox: ThemeComboBox {
+                        id: mb
+                        property string field
+                        Layout.preferredWidth: 24 * Theme.unit
+                        model: field === "from" ? Triggers.slideFroms : Triggers.motions
+                        Component.onCompleted: select(editor.triggers.motion[field])
+                        Connections { target: editor; function onTriggersChanged() { mb.select(editor.triggers.motion[mb.field]) } }
+                        onActivated: editor.setMotion(field, currentValue)
+                    }
+                    FieldRow {
+                        visible: editor.triggers.show !== "never"
+                        label: "出现"
+                        MotionBox { field: "appear" }
+                        Label {
+                            Layout.leftMargin: Theme.gap
+                            Layout.preferredWidth: 8 * Theme.unit
+                            text: "消失"
+                            color: Theme.textDim
+                        }
+                        MotionBox { field: "disappear" }
+                    }
+                    FieldRow {
+                        visible: editor.triggers.show !== "never" && Triggers.hasMotion(editor.triggers.motion)
+                        label: "动画时长"
+                        NumberField {
+                            from: 0; to: 5000; unit: "ms"
+                            value: editor.triggers.motion.ms
+                            onCommitted: v => editor.setMotion("ms", v)
+                        }
+                        Label {
+                            visible: editor.triggers.motion.appear === "slide" || editor.triggers.motion.disappear === "slide"
+                            Layout.leftMargin: Theme.gap
+                            Layout.preferredWidth: 8 * Theme.unit
+                            text: "滑动方向"
+                            color: Theme.textDim
+                        }
+                        MotionBox {
+                            visible: editor.triggers.motion.appear === "slide" || editor.triggers.motion.disappear === "slide"
+                            field: "from"
+                        }
+                    }
+                    Hint {
+                        visible: editor.triggers.show !== "never"
+                        Layout.leftMargin: editor.labelW
+                        text: (editor.kind === "group" ? "组被触发器显示 / 隐藏时成员怎么出现、消失；成员自己设了的按成员的。"
+                               : "被触发器显示 / 隐藏时怎么出现、消失（「只在有触发器满足时显示」、播放完消失、文本没有数值时）。")
+                              + (editor.kind !== "group" && editor.value("parentId", "") !== "" && !Triggers.hasMotion(editor.triggers.motion)
+                                 ? "这里都选「无」时用组的设置。" : "")
                     }
                     RowLayout {
                         Layout.fillWidth: true

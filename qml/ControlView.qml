@@ -114,6 +114,33 @@ Item {
     readonly property var groupState: follows && parentId !== "" ? groupStates[parentId] || null : null
     readonly property bool hiddenNow: state.hidden === true || (groupState !== null && groupState.hidden === true)
     readonly property bool shown: !follows || !hiddenNow || selected
+    // How it comes and goes (Triggers.parseMotion): its own, else its group's.
+    readonly property var motion: {
+        const own = Triggers.parseTriggers(triggers).motion
+        return Triggers.hasMotion(own) || !group || !group.motion ? own : group.motion
+    }
+    // 1 = fully there, 0 = gone: animated when the triggers show / hide it,
+    // by the appear / disappear motion. Arranging (live off): always 1.
+    readonly property bool wanted: !follows || !hiddenNow
+    property real presence: 1          // set on completion, then only by onWantedChanged
+    readonly property string motionNow: wanted ? motion.appear : motion.disappear
+    NumberAnimation {
+        id: presenceAnim
+        target: object; property: "presence"
+    }
+    onWantedChanged: {
+        presenceAnim.stop()
+        const to = wanted ? 1 : 0
+        if (!follows || motionNow === "none" || motion.ms <= 0) { presence = to; return }
+        presenceAnim.to = to
+        // Partway (shown again while going): the rest of the way, in proportion.
+        presenceAnim.duration = Math.max(1, motion.ms * Math.abs(to - presence))
+        presenceAnim.easing.type = motionNow === "pop" ? (wanted ? Easing.OutBack : Easing.InBack)
+                                 : wanted ? Easing.OutCubic : Easing.InCubic
+        presenceAnim.start()
+    }
+    // Selected while hidden: drawn faint, not animated away.
+    readonly property real drawPresence: selected && ghost ? 1 : presence
     // Hidden by triggers, but selected: drawn faint so it can be found.
     readonly property bool ghost: follows && hiddenNow
     // Where the effect comes from. Bars' state has no effect / angle: default each.
@@ -159,8 +186,8 @@ Item {
     // A group draws only its frame (its members' bounds, Main.groups), in
     // the preview, while selected.
     readonly property bool isGroup: kind === "group"
-    visible: isGroup ? editing && selected && group !== null && group.bw > 0 : shown
-    opacity: (ghost ? 0.35 : 1) * (group && !isGroup ? group.opacity : 1)
+    visible: isGroup ? editing && selected && group !== null && group.bw > 0 : shown || presence > 0.001
+    opacity: (ghost && selected ? 0.35 : 1) * (group && !isGroup ? group.opacity : 1)
     x: (isGroup ? (group ? group.bx : 0) : group ? group.ox + (posX - group.ox) * groupScale : posX) * designScale
     y: (isGroup ? (group ? group.by : 0) : group ? group.oy + (posY - group.oy) * groupScale : posY) * designScale
     width: (isGroup ? (group ? group.bw : 0) : boxWidth * groupScale) * designScale
@@ -194,7 +221,10 @@ Item {
     Connections { target: BridgeReader; enabled: object.kind === "buffs"; function onTicked() { object.syncBuffs() } }
     onBuffSpecChanged: syncBuffs()
     onLiveChanged: syncBuffs()
-    Component.onCompleted: syncBuffs()
+    Component.onCompleted: {
+        presence = wanted ? 1 : 0
+        syncBuffs()
+    }
     // Everything a control draws, in one item: a trigger's loop animation
     // (Triggers.loops) turns, scales and shakes it here, so the control's own
     // box, which the preview drags, and the selection outline stay put.
@@ -204,12 +234,20 @@ Item {
         visible: !object.isGroup
         readonly property real wave: (1 - Math.cos(2 * Math.PI * object.loopPhase)) / 2   // 0 -> 1 -> 0
         readonly property string loop: object.loopType
-        scale: loop === "pulse" ? 1 + 0.12 * wave : 1
+        // Appearing / disappearing: p 0 -> 1 (pop overshoots past 1 a little).
+        readonly property real p: object.drawPresence
+        readonly property string m: object.motionNow
+        readonly property real slide: m === "slide" ? (1 - p) * 24 * object.drawScale : 0
+        readonly property string from: object.motion.from
+        scale: (loop === "pulse" ? 1 + 0.12 * wave : 1) * (m === "pop" ? Math.max(0, p) : 1)
         rotation: loop === "spin" ? 360 * object.loopPhase : 0
         opacity: object.styleAlpha * (loop === "breathe" ? 1 - 0.75 * wave
                                      : loop === "blink" ? (object.loopPhase < 0.5 ? 1 : 0.1) : 1)
+                 * (m === "none" ? 1 : Math.max(0, Math.min(1, m === "pop" ? p * 2 : p)))
         transform: Translate {
-            x: body.loop === "shake" ? Math.sin(2 * Math.PI * 4 * object.loopPhase) * 3 * object.drawScale : 0
+            x: (body.loop === "shake" ? Math.sin(2 * Math.PI * 4 * object.loopPhase) * 3 * object.drawScale : 0)
+               + (body.from === "left" ? -body.slide : body.from === "right" ? body.slide : 0)
+            y: body.from === "down" ? body.slide : body.from === "up" ? -body.slide : 0
         }
 
         // Glow (a trigger's style), behind everything the control draws, out

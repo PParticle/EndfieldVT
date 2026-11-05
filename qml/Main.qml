@@ -122,6 +122,7 @@ AppWindow {
             const c = store.get(i)
             if (c.kind === "group")
                 out[c.uid] = { scale: (c.groupScale || 100) / 100,
+                               motion: Triggers.parseTriggers(c.triggers).motion,
                                opacity: (c.groupOpacity === undefined ? 100 : c.groupOpacity) / 100,
                                ox: c.posX, oy: c.posY, n: 0, left: 0, top: 0, right: 0, bottom: 0 }
         }

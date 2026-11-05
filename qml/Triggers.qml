@@ -14,6 +14,10 @@ import QtQuick
 //   drawn only while a trigger is active (no triggers: always drawn).
 //   "never": not drawn at all (in game and in the preview's live view), its
 //   settings kept: a control switched off without deleting it.
+//   `motion`: how it comes and goes when its triggers show / hide it:
+//     { appear, disappear: "none" | "fade" | "slide" | "pop", ms, from }
+//     (`from`, for slide: "down" | "up" | "left" | "right", where it comes
+//     from and goes back to). A member with neither uses its group's.
 //   A trigger is active when all (or any) of its conditions hold; its
 //   progress, value, stacks and text come from the first condition.
 //   effect "radial" (中心扩散) has two kinds (`spread`):
@@ -100,6 +104,23 @@ QtObject {
             || (t.glow && t.glow !== "none") || (t.loop && t.loop !== "none")
     }
 
+    readonly property var motions: [
+        { label: "无（直接出现 / 消失）", value: "none" }, { label: "淡入淡出", value: "fade" },
+        { label: "滑动", value: "slide" }, { label: "弹出 / 缩回", value: "pop" }
+    ]
+    readonly property var slideFroms: [
+        { label: "从下方", value: "down" }, { label: "从上方", value: "up" },
+        { label: "从左边", value: "left" }, { label: "从右边", value: "right" }
+    ]
+    function parseMotion(m) {
+        const ok = v => ["fade", "slide", "pop"].includes(v) ? v : "none"
+        m = m && typeof m === "object" ? m : {}
+        return { appear: ok(m.appear), disappear: ok(m.disappear),
+                 ms: m.ms !== undefined ? Math.max(0, Math.min(5000, Number(m.ms) || 0)) : 200,
+                 from: ["down", "up", "left", "right"].includes(m.from) ? m.from : "down" }
+    }
+    function hasMotion(m) { return m.appear !== "none" || m.disappear !== "none" }
+
     // Which units each type can watch.
     readonly property var squadUnits: [
         { label: "主控干员", value: "main" }, { label: "1 号位", value: "slot1" }, { label: "2 号位", value: "slot2" },
@@ -184,7 +205,8 @@ QtObject {
         const list = d && Array.isArray(d.list) ? d.list : []
         // Files are migrated when read (Main.migrate); skip anything else.
         return { show: d && (d.show === "active" || d.show === "never") ? d.show : "always",
-                 list: list.filter(t => t && Array.isArray(t.conditions)) }
+                 list: list.filter(t => t && Array.isArray(t.conditions)),
+                 motion: parseMotion(d ? d.motion : null) }
     }
     // A trigger against the data: the first condition's result (progress,
     // value, stacks, text), active by `mode`; `parts`: every condition's result.
