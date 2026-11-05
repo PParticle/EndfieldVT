@@ -993,31 +993,54 @@ PageFrame {
                     Section { text: "类型"; Layout.topMargin: 0 }
                     FieldRow {
                         label: "内容"
-                        Choice {
-                            role: "textMode"; fallback: "static"
+                        ThemeComboBox {
+                            id: textModeBox
                             model: [
                                 { label: "静态文字", value: "static" }, { label: "动态文字", value: "dynamic" },
-                                { label: "静态 + 动态", value: "both" }
+                                { label: "静态 + 动态", value: "both" }, { label: "模板（占位符）", value: "template" }
                             ]
+                            Component.onCompleted: select(textContentTab.mode)
+                            Connections { target: editor; function onRowChanged() { textModeBox.select(textContentTab.mode) } }
+                            // Into a template: a text with no placeholder gets {1}, so
+                            // the value it showed is still there.
+                            onActivated: {
+                                const t = editor.value("staticText", "")
+                                if (currentValue === "template" && !/\{[^{}]+\}/.test(t))
+                                    editor.roleChanged("staticText", textContentTab.mode === "dynamic" ? "{1}" : t + "{1}")
+                                editor.roleChanged("textMode", currentValue)
+                            }
                         }
                     }
                     Hint {
                         Layout.leftMargin: editor.labelW
                         text: textContentTab.mode === "static" ? "固定的文字。"
                             : textContentTab.mode === "dynamic" ? "游戏里的一个数值，随数据刷新。"
-                            : "固定文字后面接一个数值，例如「某 Buff：」+ 这个 Buff 的剩余时间。"
+                            : textContentTab.mode === "both" ? "固定文字后面接一个数值，例如「某 Buff：」+ 这个 Buff 的剩余时间。"
+                            : "文字里用 {…} 放数值，可以有多个数据来源。例：「{技力} / {上限}」「剩余 {剩余:mm:ss}」「{层数}层」「{HP} · {百分比2}」。"
                     }
                     FieldRow {
                         visible: textContentTab.mode !== "dynamic"
-                        label: "静态文字"
+                        label: textContentTab.mode === "template" ? "模板" : "静态文字"
                         EditField {
                             Layout.fillWidth: true
-                            placeholderText: textContentTab.mode === "both" ? "例：某 Buff：" : "要显示的文字"
+                            placeholderText: textContentTab.mode === "both" ? "例：某 Buff："
+                                           : textContentTab.mode === "template" ? "例：{技力} / {上限}" : "要显示的文字"
                             value: editor.value("staticText", "")
                             onCommitted: t => editor.roleChanged("staticText", t)
                         }
                     }
-                    Section { visible: textContentTab.mode !== "static"; text: "动态内容" }
+                    Hint {
+                        visible: textContentTab.mode === "template"
+                        Layout.leftMargin: editor.labelW
+                        textFormat: Text.PlainText
+                        text: "占位符：{数值}（也可写 {技力} {HP} {终结技} {失衡}）、{上限}、{百分比}、{层数}、{剩余}（剩余秒数）、{自动}。"
+                              + "后面加数字取第几个来源：{数值2}、{2}（= {自动2}）；加格式：{剩余:mm:ss}、{剩余:ss}、{数值:0.0}。不认识的 {…} 原样显示。"
+                              + "\n现在：" + (editor.textState.hidden ? "（隐藏：有占位符没有数值）" : editor.textState.text)
+                    }
+                    Section {
+                        visible: textContentTab.mode !== "static"
+                        text: textContentTab.mode === "template" ? "数据来源 1" : "动态内容"
+                    }
                     ConditionFields {
                         visible: textContentTab.mode !== "static"
                         Layout.fillWidth: true
@@ -1029,9 +1052,10 @@ PageFrame {
                     }
                     FieldRow {
                         visible: textContentTab.mode !== "static"
-                        label: "显示"
+                        label: textContentTab.mode === "template" ? "数值小数位" : "显示"
                         ThemeComboBox {
                             id: showBox
+                            visible: textContentTab.mode !== "template"
                             model: Triggers.textShows
                             Component.onCompleted: select(editor.textSource.show)
                             Connections { target: editor; function onTextSourceChanged() { showBox.select(editor.textSource.show) } }
@@ -1040,19 +1064,61 @@ PageFrame {
                         Label {
                             Layout.leftMargin: Theme.gap
                             Layout.preferredWidth: 8 * Theme.unit
-                            visible: editor.textSource.show !== "auto" && editor.textSource.show !== "stacks"
+                            visible: textContentTab.mode !== "template" && editor.textSource.show !== "auto" && editor.textSource.show !== "stacks"
                             text: "小数位"
                             color: Theme.textDim
                         }
                         NumberField {
-                            visible: editor.textSource.show !== "auto" && editor.textSource.show !== "stacks"
+                            visible: textContentTab.mode === "template" || (editor.textSource.show !== "auto" && editor.textSource.show !== "stacks")
                             from: 0; to: 3
                             value: editor.textSource.decimals
                             onCommitted: v => editor.setTextSource("decimals", v)
                         }
                     }
+                    // A template's sources 2, 3...
+                    Repeater {
+                        model: textContentTab.mode === "template" ? editor.textSource.more.length : 0
+                        ColumnLayout {
+                            id: moreBlock
+                            required property int index
+                            Layout.fillWidth: true
+                            spacing: Theme.unit
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Section { text: "数据来源 " + (moreBlock.index + 2) }
+                                Item { Layout.fillWidth: true }
+                                FlatButton {
+                                    text: "移除"
+                                    danger: true
+                                    onClicked: {
+                                        const list = editor.textSource.more.slice()
+                                        list.splice(moreBlock.index, 1)
+                                        editor.setTextSource("more", list)
+                                    }
+                                }
+                            }
+                            ConditionFields {
+                                Layout.fillWidth: true
+                                labelW: editor.labelW
+                                types: Triggers.textTypes
+                                valueOnly: true
+                                spec: editor.textSource.more[moreBlock.index]
+                                onChanged: c => {
+                                    const list = editor.textSource.more.slice()
+                                    list[moreBlock.index] = c
+                                    editor.setTextSource("more", list)
+                                }
+                            }
+                        }
+                    }
+                    FlatButton {
+                        visible: textContentTab.mode === "template"
+                        Layout.leftMargin: editor.labelW
+                        text: "＋ 数据来源"
+                        onClicked: editor.setTextSource("more", editor.textSource.more.concat([Triggers.makeCondition("hp")]))
+                    }
                     Hint {
-                        visible: textContentTab.mode !== "static"
+                        visible: textContentTab.mode !== "static" && textContentTab.mode !== "template"
                         Layout.leftMargin: editor.labelW
                         text: "自动和数值：Buff / 技能 / 连携技是剩余秒数，其余是当前值（HP 5595、技力 237）。数值 / 上限：5595 / 5950。只有「百分比」显示 94%。"
                     }
@@ -1060,7 +1126,7 @@ PageFrame {
                         visible: textContentTab.mode !== "static"
                         label: "没有数值时"
                         CheckRow {
-                            text: "隐藏整个文本"
+                            text: textContentTab.mode === "template" ? "隐藏整个文本（任一占位符没有数值时）" : "隐藏整个文本"
                             on: editor.textSource.hideEmpty
                             onClicked: editor.setTextSource("hideEmpty", !editor.textSource.hideEmpty)
                         }
@@ -1076,6 +1142,8 @@ PageFrame {
                             Layout.preferredWidth: 16 * Theme.unit
                             placeholderText: "留空"
                             value: editor.textSource.empty
+                            ToolTip.visible: hovered && textContentTab.mode === "template"
+                            ToolTip.text: "模板里没有数值的那个占位符改显示这个"
                             onCommitted: t => editor.setTextSource("empty", t)
                         }
                     }

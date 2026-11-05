@@ -248,10 +248,12 @@ QtObject {
     }
 
     // ---- text
-    // `textMode`: "static" (staticText), "dynamic" (a value from the game) or
-    // "both" (staticText, then the value). `textSource` role (JSON), the value:
+    // `textMode`: "static" (staticText), "dynamic" (a value from the game),
+    // "both" (staticText, then the value) or "template" (staticText with
+    // placeholders, see fillTemplate). `textSource` role (JSON), the value:
     //   { condition, show: "auto" | "value" | "ratio" | "percent" | "stacks",
-    //     decimals, empty, hideEmpty }
+    //     decimals, empty, hideEmpty, more: [condition] }
+    // `more`: a template's sources 2, 3...; `condition` is source 1.
     // `condition` picks the data as a trigger condition does; only what it
     // reads matters, not whether its test holds. While there is no value (no
     // data, the buff is gone, no target) `empty` stands in, or with
@@ -275,18 +277,25 @@ QtObject {
             show: textShows.some(s => s.value === d.show) ? d.show : "auto",
             decimals: Math.max(0, Math.min(3, Math.round(Number(d.decimals) || 0))),
             empty: d.empty !== undefined ? String(d.empty) : "",
-            hideEmpty: d.hideEmpty !== false
+            hideEmpty: d.hideEmpty !== false,
+            more: Array.isArray(d.more) ? d.more.filter(c => c && typeof c === "object" && c.type) : []
         }
+    }
+    // What a source reads now; null = no value (no data, the buff is gone).
+    function readSource(reader, condition) {
+        // A buff source reads the buff itself, whatever its 状态 and extra tests say.
+        const c = condition.type === "buff"
+                  ? Object.assign({}, condition, { show: "present", stacksOp: "any", leftOp: "any" }) : condition
+        const r = reader.evaluate(c)
+        if (!r.available) return null
+        // Present-or-not data has nothing to show while absent.
+        if ((c.type === "buff" || c.type === "skillCast") && !r.active) return null
+        return r
     }
     // The value part of a text, as shown; "" = no value now.
     function dynamicValue(reader, source) {
-        // A buff source reads the buff itself, whatever its 状态 says.
-        const condition = source.condition.type === "buff"
-                          ? Object.assign({}, source.condition, { show: "present" }) : source.condition
-        const r = reader.evaluate(condition)
-        if (!r.available) return ""
-        // Present-or-not data has nothing to show while absent.
-        if ((condition.type === "buff" || condition.type === "skillCast") && !r.active) return ""
+        const r = readSource(reader, source.condition)
+        if (!r) return ""
         const f = v => Number(v || 0).toFixed(source.decimals)
         switch (source.show) {
         case "value": return f(r.value)
@@ -296,11 +305,65 @@ QtObject {
         default: return r.text || ""
         }
     }
+    // Template placeholders: {名称}, {名称N} for source N (1 when left out),
+    // {名称:格式}. Anything else in braces stays as it is.
+    //   名称   数值 (also 技力 / HP / 终结技 / 失衡 / 值)  上限  百分比  层数
+    //          剩余 (seconds left; 冷却 too)  自动 (as 「自动」 shows it)
+    //   {N}    source N, 自动
+    //   格式   mm:ss, m:ss, ss (whole seconds), 0 / 0.0 / 0.00 (decimals)
+    readonly property var placeholderNames: ({
+        "数值": "value", "值": "value", "技力": "value", "HP": "value", "hp": "value", "终结技": "value", "失衡": "value",
+        "上限": "max", "百分比": "percent", "层数": "stacks", "剩余": "left", "冷却": "left", "自动": "auto"
+    })
+    function formatNumber(v, format, fallbackDecimals) {
+        v = Number(v || 0)
+        if (format === "mm:ss" || format === "m:ss") {
+            const t = Math.max(0, Math.ceil(v))
+            const m = Math.floor(t / 60), sec = t % 60
+            return (format === "mm:ss" && m < 10 ? "0" : "") + m + ":" + (sec < 10 ? "0" : "") + sec
+        }
+        if (format === "ss") return String(Math.max(0, Math.ceil(v)))
+        if (/^0(\.0{1,3})?$/.test(format)) return v.toFixed(format.length > 1 ? format.length - 2 : 0)
+        return v.toFixed(fallbackDecimals)
+    }
+    // Fills a template; { text, missing }: missing = a placeholder had no value.
+    function fillTemplate(reader, template, source, arranging) {
+        const conditions = [source.condition].concat(source.more)
+        const reads = []
+        let missing = false
+        const text = String(template).replace(/\{([^{}:]+?)(\d*)(?::([^{}]+))?\}/g, (whole, name, digits, format) => {
+            // "{2}": the name is all digits.
+            let key, n
+            if (/^\d+$/.test(name + digits)) { key = "auto"; n = Number(name + digits) }
+            else { key = placeholderNames[name.trim()]; n = digits !== "" ? Number(digits) : 1 }
+            if (!key || n < 1 || n > conditions.length) return whole
+            if (reads[n] === undefined) reads[n] = readSource(reader, conditions[n - 1])
+            const r = reads[n]
+            if (!r) {
+                missing = true
+                return arranging ? "--" : source.empty
+            }
+            const f = format || ""
+            switch (key) {
+            case "value": return formatNumber(r.value, f, source.decimals)
+            case "max": return formatNumber(r.max, f, source.decimals)
+            case "percent": return formatNumber(r.progress * 100, f, source.decimals) + (f === "" || f.startsWith("0") ? "%" : "")
+            case "stacks": return String(r.stacks || 0)
+            case "left": return r.timeLeft >= 0 ? formatNumber(r.timeLeft, f, 1) : arranging ? "--" : source.empty
+            default: return f !== "" && r.text !== "" ? formatNumber(r.value, f, source.decimals) : r.text || ""
+            }
+        })
+        return { text: text, missing: missing }
+    }
     // The whole text: { text, hidden }. `arranging`: a value that is missing
     // shows as "--", never hidden, so the text can still be seen and placed.
     function composeText(reader, mode, staticText, sourceText, arranging) {
         if (mode === "static") return { text: staticText, hidden: false }
         const source = parseTextSource(sourceText)
+        if (mode === "template") {
+            const t = fillTemplate(reader, staticText, source, arranging)
+            return { text: t.text, hidden: t.missing && !arranging && source.hideEmpty }
+        }
         let value = dynamicValue(reader, source)
         let hidden = false
         if (value === "") {
