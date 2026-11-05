@@ -138,24 +138,24 @@ PageFrame {
         }
         property Component extra: null
     }
-    // The buffs a unit carries, from the shared buff model.
+    // The buffs a unit carries: the shared buff model filtered to this
+    // owner, so each unit makes rows for its own buffs only (not one hidden
+    // row per buff of every unit: thousands of items in a boss fight).
     component BuffList: Column {
         id: list
-        property int ownerUid: 0
+        property real ownerUid: 0   // a uint32: real keeps all of it (int would go negative)
         spacing: 2
         Label {
-            visible: buffRepeater.shown === 0
+            visible: buffRepeater.count === 0
             text: "无 Buff"
             color: Theme.textFaint
             font.pixelSize: Theme.caption
         }
         Repeater {
             id: buffRepeater
-            property int shown: 0
-            model: BridgeReader.buffs
+            model: OwnerFilterModel { source: BridgeReader.buffs; ownerUid: list.ownerUid }
             delegate: Item {
                 id: buff
-                required property int ownerUid
                 required property string buffId
                 required property string parentBuffId
                 required property string source
@@ -166,13 +166,8 @@ PageFrame {
                 required property real duration
                 required property real timeLeft
                 required property real dilation
-                readonly property bool mine: ownerUid === list.ownerUid && list.ownerUid !== 0
-                visible: mine
                 width: list.width
-                height: mine ? 2 * Theme.unit + 2 : 0
-                Component.onCompleted: if (mine) buffRepeater.shown++
-                Component.onDestruction: if (mine) buffRepeater.shown--
-                onMineChanged: buffRepeater.shown += mine ? 1 : -1
+                height: 2 * Theme.unit + 2
                 ToolTip.visible: hover.hovered
                 ToolTip.delay: 300
                 ToolTip.text: buffId + (parentBuffId ? "\n父 Buff: " + parentBuffId : "")

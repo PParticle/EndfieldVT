@@ -2,6 +2,7 @@
 
 #include <QAbstractListModel>
 #include <QObject>
+#include <QSortFilterProxyModel>
 #include <QTimer>
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
@@ -39,6 +40,53 @@ private:
     QByteArrayList m_roles;
     QByteArray m_key;
     QList<QVariantMap> m_rows;
+};
+
+// The rows of a KeyedListModel whose ownerUid is `ownerUid` (the 调试 page:
+// one unit's buffs). Plain C++ filtering: a refresh changes every buff's
+// time, and only the changed rows are looked at again.
+class OwnerFilterModel : public QSortFilterProxyModel
+{
+    Q_OBJECT
+    QML_ELEMENT
+    Q_PROPERTY(KeyedListModel* source READ source WRITE setSource NOTIFY sourceChanged)
+    Q_PROPERTY(uint ownerUid READ ownerUid WRITE setOwnerUid NOTIFY ownerUidChanged)
+
+public:
+    explicit OwnerFilterModel(QObject* parent = nullptr) : QSortFilterProxyModel(parent) { setDynamicSortFilter(true); }
+
+    KeyedListModel* source() const { return m_source; }
+    void setSource(KeyedListModel* model)
+    {
+        if (model == m_source) return;
+        m_source = model;
+        setSourceModel(model);
+        emit sourceChanged();
+    }
+    uint ownerUid() const { return m_owner; }
+    void setOwnerUid(uint uid)
+    {
+        if (uid == m_owner) return;
+        beginFilterChange();
+        m_owner = uid;
+        endFilterChange(Direction::Rows);
+        emit ownerUidChanged();
+    }
+
+signals:
+    void sourceChanged();
+    void ownerUidChanged();
+
+protected:
+    bool filterAcceptsRow(int row, const QModelIndex&) const override
+    {
+        return m_owner != 0 && m_source && row < m_source->count()
+               && m_source->rows()[row].value(QStringLiteral("ownerUid")).toUInt() == m_owner;
+    }
+
+private:
+    KeyedListModel* m_source = nullptr;
+    uint m_owner = 0;
 };
 
 // What EndfieldDataBridge currently reports, read from its shared memory

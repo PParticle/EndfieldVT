@@ -625,7 +625,13 @@ AppWindow {
                     }
                 }
                 NewPage { onCreateRequested: kind => root.createControl(kind) }
-                DebugPage {}
+                // Made only while shown: in a fight it is thousands of items,
+                // all kept up to date every bridge read. Its data lives in
+                // BridgeReader, which keeps reading either way.
+                Loader {
+                    active: root.page === "debug"
+                    sourceComponent: Component { DebugPage {} }
+                }
                 WidgetEditor {
                     model: store
                     selectedIndex: root.selectedIndex
