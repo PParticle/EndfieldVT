@@ -47,12 +47,12 @@ PageFrame {
 
     readonly property string kind: value("kind", "")
     readonly property bool tabbed: kind !== ""
-    readonly property var kindNames: ({ icon: "图标", bar: "进度条", text: "文本", buffs: "Buff 列表", group: "组" })
+    readonly property var kindNames: ({ icon: "图标", bar: "进度条", text: "文本", buffs: "Buff列表", group: "组" })
     readonly property int labelW: 14 * Theme.unit
     property int tab: 0
 
     title: value("name", "控件")
-    subtitle: (kindNames[kind] || "控件") + "属性"
+    subtitle: (kindNames[kind] || "控件") + " 属性"
 
     // ---- triggers, kept as JSON in their role (qml/Triggers.qml)
     readonly property var triggers: Triggers.parseTriggers(value("triggers", ""))
@@ -300,9 +300,7 @@ PageFrame {
         }
         Hint {
             Layout.leftMargin: editor.labelW
-            text: "用了「每个小队成员」：画 4 份，1–4 号位各一份，从这个控件的位置往" 
-                  + ({ down: "下", right: "右", up: "上", left: "左" }[editor.value("expandDir", "down")] || "下")
-                  + "排开，共用外观和触发器。某号位没有干员时那一份不显示。这里显示的状态是 1 号位的。"
+            text: "按队伍 1–4 号位展开生成 4 份实例，共享外观与触发器逻辑。无干员位置不显示，此处显示的是 1 号位的状态。"
         }
     }
     // The value number's place, size and color (icons and bars).
@@ -310,7 +308,7 @@ PageFrame {
         Layout.fillWidth: true
         spacing: Theme.unit
         FieldRow {
-            label: "位置"
+            label: "锚点位置"
             Choice {
                 role: "valueAnchor"; fallback: "center"
                 model: [
@@ -352,7 +350,7 @@ PageFrame {
                 onClicked: editor.pickColor("valueColor", valueSwatch)
             }
         }
-        Hint { Layout.leftMargin: editor.labelW; text: "位置是控件框里的锚点，X / Y 再从那里偏移（设计像素）。" }
+        Hint { Layout.leftMargin: editor.labelW; text: "锚点位置基于控件框，X/Y 相对锚点偏移（设计像素）。" }
     }
     component Choice: ThemeComboBox {
         id: choice
@@ -384,19 +382,21 @@ PageFrame {
                 readonly property bool hidden: editor.triggerState.hidden === true || byGroup
                                                || (editor.kind === "text" && editor.textState.hidden)
                 text: editor.triggers.show === "never" ? "○ 始终隐藏"
-                    : byGroup ? (editor.parentShow === "never" ? "○ 始终隐藏（所在的组）" : "○ 当前不显示（组的触发器）")
-                    : hidden ? (editor.kind === "group" ? "○ 当前整组隐藏" : "○ 当前不显示")
+                    : byGroup ? (editor.parentShow === "never" ? "○ 始终隐藏（继承自组）" : "○ 当前隐藏（组触发器未满足）")
+                    : hidden ? (editor.kind === "group" ? "○ 当前整组隐藏"
+                                : editor.kind === "text" && editor.triggerState.hidden !== true ? "○ 当前隐藏（无数据）"
+                                : "○ 当前隐藏（触发器未满足）")
                     : editor.kind === "group"
                       ? (editor.triggerState.driving >= 0 ? "● 组触发器 " + (editor.triggerState.driving + 1) + "：" + Triggers.effectLabel(editor.triggerState.effect)
-                                                         : "● 组内控件按各自的触发器显示")
-                    : editor.kind === "text" ? "● 显示：" + editor.textState.text
-                    : editor.kind === "buffs" ? "● 当前 " + editor.buffNow.length + " 个"
+                                                         : "● 组内控件按各自触发器显示")
+                    : editor.kind === "text" ? "● 当前显示：" + editor.textState.text
+                    : editor.kind === "buffs" ? "● 当前显示 " + editor.buffNow.length + " 项"
                     : editor.kind === "bar"
                       ? (editor.triggerState.driving >= 0
                          ? "● 触发器 " + (editor.triggerState.driving + 1) + "：进度 " + Math.round(editor.triggerState.progress * 100) + "%"
-                         : editor.triggers.list.length === 0 ? "● 没有触发器（显示为满）" : "● 没有满足的触发器（显示为空）")
+                         : editor.triggers.list.length === 0 ? "● 无触发器（显示为满）" : "● 无满足的触发器（显示为空）")
                     : editor.triggerState.driving >= 0 ? "● 触发器 " + (editor.triggerState.driving + 1) + "：" + Triggers.effectLabel(editor.triggerState.effect)
-                    : "● 显示，无触发效果"
+                    : "● 当前显示（无触发效果）"
                 color: hidden ? Theme.textFaint : Theme.accent
                 font.pixelSize: Theme.caption
             }
@@ -475,15 +475,15 @@ PageFrame {
                             Layout.preferredWidth: editor.labelW
                             Layout.preferredHeight: Theme.rowH
                             verticalAlignment: Text.AlignVCenter
-                            text: "显示"
+                            text: "显示模式"
                             color: Theme.textDim
                         }
                         ThemeComboBox {
                             id: triggerShowBox
                             Layout.preferredWidth: 36 * Theme.unit
                             model: [
-                                { label: "始终显示，触发器只加效果", value: "always" },
-                                { label: "只在有触发器满足时显示", value: "active" },
+                                { label: "始终显示（仅叠加效果）", value: "always" },
+                                { label: "仅当触发器满足时显示", value: "active" },
                                 { label: "始终隐藏", value: "never" }
                             ]
                             Component.onCompleted: select(editor.triggers.show)
@@ -494,14 +494,14 @@ PageFrame {
                     Hint {
                         Layout.leftMargin: editor.labelW
                         text: editor.triggers.show === "never"
-                              ? (editor.kind === "group" ? "整组都不显示（游戏里和预览的「按触发器显示」里），设置都保留：不删除就先关掉这一组。"
-                                                         : "不显示（游戏里和预览的「按触发器显示」里），设置都保留：不删除就先关掉它。选中时在预览里淡淡显示，方便找到。")
+                              ? (editor.kind === "group" ? "隐藏整组（包含游戏内与预览模式），保留配置项。"
+                                                         : "隐藏控件（包含游戏内与预览模式），保留配置项。选中时在预览区半透明显示。")
                               : editor.kind === "group"
-                              ? (editor.triggers.show === "always" ? "组内控件照常显示；满足的组触发器把效果加到它们上面。"
-                                                                   : "没有组触发器满足时，整组隐藏。例：战斗状态 = 战斗中 → 只在战斗时显示这一组。")
+                              ? (editor.triggers.show === "always" ? "组内控件正常显示，满足条件的组触发器将应用效果至全组。"
+                                                                   : "无组触发器满足时隐藏整组。例如：战斗状态 = 战斗中 → 仅在战斗中显示该组。")
                               : editor.triggers.show === "always"
-                              ? "控件一直按外观显示；满足的触发器在上面播放效果。"
-                              : "没有触发器满足时整个控件隐藏。例：连携技冷却完毕 + 中心扩散（图标本身从无变大）+ 播放一次 + 播放完消失 = 冷却转好时从无扩散出来，播完消失。"
+                              ? "控件始终按基础外观显示，满足条件的触发器叠加播放效果。"
+                              : "无触发器满足时隐藏控件。例如：连携技就绪 + 中心扩散动画 + 播放一次 = 冷却完毕时扩散提示并自动消失。"
                     }
                     // How it comes and goes when the triggers show / hide it.
                     component MotionBox: ThemeComboBox {
@@ -515,12 +515,12 @@ PageFrame {
                     }
                     FieldRow {
                         visible: editor.triggers.show !== "never"
-                        label: "出现"
+                        label: "出现动画"
                         MotionBox { field: "appear" }
                         Label {
                             Layout.leftMargin: Theme.gap
                             Layout.preferredWidth: 8 * Theme.unit
-                            text: "消失"
+                            text: "消失动画"
                             color: Theme.textDim
                         }
                         MotionBox { field: "disappear" }
@@ -548,10 +548,10 @@ PageFrame {
                     Hint {
                         visible: editor.triggers.show !== "never"
                         Layout.leftMargin: editor.labelW
-                        text: (editor.kind === "group" ? "组被触发器显示 / 隐藏时成员怎么出现、消失；成员自己设了的按成员的。"
-                               : "被触发器显示 / 隐藏时怎么出现、消失（「只在有触发器满足时显示」、播放完消失、文本没有数值时）。")
+                        text: (editor.kind === "group" ? "设置组显示/隐藏时的过渡动画。若子控件独立设置，则优先使用子控件设置。"
+                               : "设置控件显示/隐藏时的过渡动画（适用于「仅当触发器满足时显示」、播放完毕消失、动态文本无数据等场景）。")
                               + (editor.kind !== "group" && editor.value("parentId", "") !== "" && !Triggers.hasMotion(editor.triggers.motion)
-                                 ? "这里都选「无」时用组的设置。" : "")
+                                 ? "继承所在组的动画设置。" : "")
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -559,10 +559,10 @@ PageFrame {
                         spacing: Theme.unit
                         Label {
                             text: editor.triggers.list.length === 0
-                                  ? (editor.kind === "bar" ? "没有触发器：显示为满"
-                                   : editor.kind === "group" ? "没有触发器：组内控件按各自的触发器显示"
-                                   : "没有触发器：按外观静态显示")
-                                  : "触发器"
+                                  ? (editor.kind === "bar" ? "无触发器（默认满进度）"
+                                   : editor.kind === "group" ? "无触发器（子控件按各自触发器显示）"
+                                   : "无触发器（按基础外观静态显示）")
+                                  : "触发器列表"
                             color: Theme.textDim
                         }
                         Item { Layout.fillWidth: true }
@@ -601,7 +601,7 @@ PageFrame {
                         color: Theme.textFaint
                         font.pixelSize: Theme.caption
                         visible: editor.triggers.list.length > 0 && editor.kind === "bar"
-                        text: "按顺序检查：第一个满足、且「给出进度」的触发器给出进度（标黄的那个）。没有满足的就显示为空。满足时样式（变色、发光、闪烁…）则每个满足的触发器都会套上。例：连携技（勾「反向」）= 冷却转好时填满；Buff = 剩余时间。"
+                        text: "按顺序检查：首个满足且勾选「给出进度」的触发器驱动进度条（高亮标记）。无满足时显示为空。样式效果（变色、发光等）将叠加所有满足条件的触发器。"
                     }
                     Label {
                         Layout.fillWidth: true
@@ -609,7 +609,7 @@ PageFrame {
                         color: Theme.textFaint
                         font.pixelSize: Theme.caption
                         visible: editor.triggers.list.length > 0 && editor.kind === "icon"
-                        text: "按顺序检查：第一个满足、且设了效果的触发器驱动图标（标黄的那个）。例：连携技 + 顺时针填充 = 连携技冷却转圈；终结技充满 + 中心扩散（图标本身从无变大）+ 播放一次 = 充满时的提示动画。"
+                        text: "按顺序检查：首个满足且设有效果的触发器驱动图标（高亮标记）。例如：连携技 + 顺时针冷却转圈；终结技就绪 + 中心扩散动画。"
                     }
                     Label {
                         Layout.fillWidth: true
@@ -617,7 +617,7 @@ PageFrame {
                         color: Theme.textFaint
                         font.pixelSize: Theme.caption
                         visible: editor.kind === "group"
-                        text: "组的触发器作用于组里的每个控件，不改它们自己的设置：选「只在有触发器满足时显示」，没有满足时整组隐藏（成员自己的触发器照常生效，两者都允许才显示）；设了效果的触发器满足时，组里没有自己效果在播的图标播放组的效果。控件移出组就不再受影响。"
+                        text: "组触发器作用于全组控件且不覆盖各控件独立设置：选「仅当触发器满足时显示」时，无满足则整组隐藏；满足触发效果时，组内无独立动画的图标将播放组效果。"
                     }
                     Label {
                         Layout.fillWidth: true
@@ -625,7 +625,7 @@ PageFrame {
                         color: Theme.textFaint
                         font.pixelSize: Theme.caption
                         visible: BridgeReader.status !== "online" && BridgeReader.status !== "stale"
-                        text: "Bridge " + BridgeReader.statusText + "：条件暂时无法判断，都按不满足处理。"
+                        text: "Bridge " + BridgeReader.statusText + "：数据不可用，判定为不满足。"
                     }
 
                     Menu {
@@ -672,7 +672,7 @@ PageFrame {
                         Label {
                             Layout.leftMargin: Theme.gap
                             Layout.preferredWidth: 8 * Theme.unit
-                            text: "旋转"
+                            text: "旋转角度"
                             color: Theme.textDim
                         }
                         NumberField {
@@ -682,7 +682,7 @@ PageFrame {
                         }
                     }
                     FieldRow {
-                        label: "图形大小"
+                        label: "图标尺寸"
                         NumberField {
                             from: 1; to: 100; decimals: 1; unit: "%"
                             value: editor.value("iconSize", 84)
@@ -690,7 +690,7 @@ PageFrame {
                         }
                         Label {
                             Layout.leftMargin: Theme.unit
-                            text: "控件框较短一边的百分比（1–100）"
+                            text: "控件框短边比例（1–100%）。"
                             color: Theme.textFaint
                             font.pixelSize: Theme.caption
                         }
@@ -699,7 +699,7 @@ PageFrame {
                     Section { text: "边框" }
                     ColorRow { label: "颜色"; colorRole: "borderColor"; opacityRole: "borderOpacity" }
                     FieldRow {
-                        label: "宽度"
+                        label: "线宽"
                         NumberField {
                             from: 0; to: 16; decimals: 1; unit: "px"
                             value: editor.value("borderWidth", 3)
@@ -739,15 +739,15 @@ PageFrame {
                             onCommitted: v => editor.roleChanged("boxHeight", v)
                         }
                     }
-                    Hint { Layout.leftMargin: editor.labelW; text: "按 1280×720 的设计坐标，游戏里按实际分辨率等比缩放。" }
+                    Hint { Layout.leftMargin: editor.labelW; text: "基于 1280×720 基准分辨率，游戏内自动按比例缩放。" }
 
-                    Section { text: "文字" }
+                    Section { text: "文本" }
                     FieldRow {
-                        label: "显示"
+                        label: "文本显示"
                         CheckRow { text: "剩余时间"; role: "showTimer"; fallback: true }
                         CheckRow { Layout.leftMargin: Theme.gap; text: "层数"; role: "showStacks"; fallback: true }
                     }
-                    Hint { Layout.leftMargin: editor.labelW; text: "数字取自正在驱动图标的触发器；层数大于 1 时才显示。" }
+                    Hint { Layout.leftMargin: editor.labelW; text: "数值取自当前驱动图标的触发器；层数大于 1 时显示。" }
                     ValueStyle { visible: editor.value("showTimer", true) }
                 }
 
@@ -759,17 +759,17 @@ PageFrame {
                     spacing: Theme.unit
                     readonly property bool ring: editor.value("barStyle", "rect") === "ring"
 
-                    Section { text: "类型"; Layout.topMargin: 0 }
+                    Section { text: "样式类型"; Layout.topMargin: 0 }
                     FieldRow {
                         label: "形状"
                         Choice {
                             role: "barStyle"; fallback: "rect"
-                            model: [{ label: "长条", value: "rect" }, { label: "圆环", value: "ring" }]
+                            model: [{ label: "矩形条", value: "rect" }, { label: "圆环", value: "ring" }]
                         }
                         Label {
                             Layout.leftMargin: Theme.gap
                             Layout.preferredWidth: 8 * Theme.unit
-                            text: "旋转"
+                            text: "旋转角度"
                             color: Theme.textDim
                         }
                         NumberField {
@@ -799,10 +799,10 @@ PageFrame {
                             onCommitted: v => editor.roleChanged("ringInner", v)
                         }
                     }
-                    Hint { visible: barLooksTab.ring; Layout.leftMargin: editor.labelW; text: "内圆半径为 0 就是实心圆。" }
+                    Hint { visible: barLooksTab.ring; Layout.leftMargin: editor.labelW; text: "内圆半径设为 0 时为实心饼图。" }
                     FieldRow {
                         visible: barLooksTab.ring
-                        label: "缺口"
+                        label: "缺口角度"
                         NumberField {
                             from: 0; to: 359; unit: "°"
                             value: editor.value("ringGap", 0)
@@ -810,7 +810,7 @@ PageFrame {
                         }
                         Label {
                             Layout.leftMargin: Theme.unit
-                            text: "削掉的角度，旋转为 0° 时在底部：0° 是整圆，90° 是 3/4 圆弧"
+                            text: "裁剪角度，旋转 0° 时缺口位于底部：0° 为完整圆环，90° 为 3/4 弧线。"
                             color: Theme.textFaint
                             font.pixelSize: Theme.caption
                         }
@@ -838,7 +838,7 @@ PageFrame {
                         }
                     }
 
-                    Section { text: "进度" }
+                    Section { text: "进度样式" }
                     FieldRow {
                         label: "方向"
                         Choice {
@@ -846,16 +846,16 @@ PageFrame {
                             role: "barDirection"; fallback: "leftToRight"
                             // A ring only goes two ways; the rect has all four.
                             model: barLooksTab.ring
-                                ? [{ label: "顺时针（从缺口左端）", value: "leftToRight" }, { label: "逆时针（从缺口右端）", value: "rightToLeft" }]
-                                : [{ label: "左到右", value: "leftToRight" }, { label: "右到左", value: "rightToLeft" },
-                                   { label: "下到上", value: "bottomToTop" }, { label: "上到下", value: "topToBottom" }]
+                                ? [{ label: "顺时针", value: "leftToRight" }, { label: "逆时针", value: "rightToLeft" }]
+                                : [{ label: "左至右", value: "leftToRight" }, { label: "右至左", value: "rightToLeft" },
+                                   { label: "下至上", value: "bottomToTop" }, { label: "上至下", value: "topToBottom" }]
                             onModelChanged: select(editor.value("barDirection", "leftToRight"))
                         }
                     }
                     ColorRow { label: "颜色"; colorRole: "progressColor"; opacityRole: "progressOpacity" }
                     Hint {
                         Layout.leftMargin: editor.labelW
-                        text: "进度单独画在内部填充上面，有自己的颜色和不透明度。"
+                        text: "进度层独立绘制于背景填充上方，包含独立的颜色与不透明度。"
                     }
                     FieldRow {
                         label: "平滑过渡"
@@ -866,14 +866,14 @@ PageFrame {
                         }
                         Label {
                             Layout.leftMargin: Theme.unit
-                            text: "进度变化时用这么久滑到新值；0 = 直接跳"
+                            text: "数值平滑变更的时长；0 表示立即变更。"
                             color: Theme.textFaint
                             font.pixelSize: Theme.caption
                         }
                     }
                     FieldRow {
-                        label: "扣血残影"
-                        CheckRow { text: "开启"; role: "barTrail"; fallback: false }
+                        label: "消耗残影"
+                        CheckRow { text: "启用"; role: "barTrail"; fallback: false }
                         ColorField {
                             id: trailSwatch
                             visible: editor.value("barTrail", false)
@@ -893,14 +893,14 @@ PageFrame {
                         visible: editor.value("barTrail", false)
                         label: ""
                         NumberField {
-                            from: 0; to: 5000; unit: "ms 停留"
+                            from: 0; to: 5000; unit: "停留 ms"
                             implicitWidth: 16 * Theme.unit
                             value: editor.value("trailHold", 400)
                             onCommitted: v => editor.roleChanged("trailHold", v)
                         }
                         NumberField {
                             Layout.leftMargin: Theme.unit
-                            from: 0; to: 5000; unit: "ms 缩回"
+                            from: 0; to: 5000; unit: "缩回 ms"
                             implicitWidth: 16 * Theme.unit
                             value: editor.value("trailShrink", 300)
                             onCommitted: v => editor.roleChanged("trailShrink", v)
@@ -909,13 +909,13 @@ PageFrame {
                     Hint {
                         visible: editor.value("barTrail", false)
                         Layout.leftMargin: editor.labelW
-                        text: "进度下降时，掉下去的那段先用这个颜色留着，停留之后再缩回去；连续下降时等最后一次停留完再缩。进度上升时直接跟上。"
+                        text: "进度下降时留存残影段，停留设定时间后缩回；连续下降时重置停留计时。进度上升时实时更新。"
                     }
                     FieldRow {
-                        label: "分段"
+                        label: "进度分段"
                         ThemeComboBox {
                             id: segBox
-                            model: [{ label: "不分段", value: "none" }, { label: "按技力格", value: "cells" }, { label: "固定段数", value: "fixed" }]
+                            model: [{ label: "不分段", value: "none" }, { label: "按战技格数", value: "cells" }, { label: "固定段数", value: "fixed" }]
                             readonly property real v: editor.value("barSegments", 0)
                             Component.onCompleted: select(v < 0 ? "cells" : v > 1 ? "fixed" : "none")
                             onVChanged: select(v < 0 ? "cells" : v > 1 ? "fixed" : "none")
@@ -945,19 +945,19 @@ PageFrame {
                     Hint {
                         visible: editor.value("barSegments", 0) < 0
                         Layout.leftMargin: editor.labelW
-                        text: "段数 = 技力上限 / 每格技力，随游戏里的上限变化（当前 " + (BridgeReader.team.atbPerCell > 0
-                              ? Math.round(BridgeReader.team.atbMax / BridgeReader.team.atbPerCell) + " 格）" : "未知）")
+                        text: "分段数 = 技力上限 / 单格技力，跟随游戏数据动态更新（当前 " + (BridgeReader.team.atbPerCell > 0
+                              ? Math.round(BridgeReader.team.atbMax / BridgeReader.team.atbPerCell) + " 格）。" : "未知）。")
                     }
                     FieldRow {
                         visible: barLooksTab.ring
-                        label: "端点"
+                        label: "端点样式"
                         Choice {
                             role: "ringCap"; fallback: "butt"
                             model: [{ label: "平头", value: "butt" }, { label: "圆头", value: "round" }]
                         }
                         Label {
                             Layout.leftMargin: Theme.unit
-                            text: "圆环有缺口或未满时，进度和填充两端的形状"
+                            text: "进度条与背景两端的边缘形状（平头/圆头）。"
                             color: Theme.textFaint
                             font.pixelSize: Theme.caption
                         }
@@ -966,7 +966,7 @@ PageFrame {
                     Section { text: "边框" }
                     ColorRow { label: "颜色"; colorRole: "borderColor"; opacityRole: "borderOpacity" }
                     FieldRow {
-                        label: "宽度"
+                        label: "线宽"
                         NumberField {
                             from: 0; to: 16; decimals: 1; unit: "px"
                             value: editor.value("borderWidth", 3)
@@ -974,20 +974,20 @@ PageFrame {
                         }
                     }
 
-                    Section { text: "内部填充" }
+                    Section { text: "背景填充" }
                     ColorRow { label: "颜色"; colorRole: "fillColor"; opacityRole: "fillOpacity" }
                     Hint {
                         Layout.leftMargin: editor.labelW
-                        text: "进度没有走到的部分。不透明度设为 0% 就只剩边框；边框宽度也设为 0 就只有进度。"
+                        text: "未填充区域外观。不透明度设为 0% 时仅保留边框。"
                     }
 
-                    Section { text: "文字" }
+                    Section { text: "文本" }
                     FieldRow {
-                        label: "显示"
+                        label: "文本显示"
                         CheckRow { text: "数值"; role: "showTimer"; fallback: true }
                         CheckRow { Layout.leftMargin: Theme.gap; text: "层数"; role: "showStacks"; fallback: true }
                     }
-                    Hint { Layout.leftMargin: editor.labelW; text: "数值取自决定进度的触发器（技力、剩余时间等）；层数大于 1 时才显示。" }
+                    Hint { Layout.leftMargin: editor.labelW; text: "数值取自当前驱动进度的触发器；层数大于 1 时显示。" }
                     ValueStyle { visible: editor.value("showTimer", true) }
 
                     Section { text: "位置与尺寸" }
@@ -1014,7 +1014,7 @@ PageFrame {
                     }
                     Hint {
                         Layout.leftMargin: editor.labelW
-                        text: "控件框跟着形状、尺寸、旋转和边框自动算，旋转后取外接矩形；位置是控件框的左上角。"
+                        text: "控件包围盒随形状、旋转与边框自动计算；位置基于外接矩形左上角。"
                     }
                 }
 
@@ -1026,14 +1026,14 @@ PageFrame {
                     spacing: Theme.unit
                     readonly property string mode: editor.value("textMode", "static")
 
-                    Section { text: "类型"; Layout.topMargin: 0 }
+                    Section { text: "模式选择"; Layout.topMargin: 0 }
                     FieldRow {
-                        label: "内容"
+                        label: "模式"
                         ThemeComboBox {
                             id: textModeBox
                             model: [
-                                { label: "静态文字", value: "static" }, { label: "动态文字", value: "dynamic" },
-                                { label: "静态 + 动态", value: "both" }, { label: "模板（占位符）", value: "template" }
+                                { label: "静态文本", value: "static" }, { label: "动态文本", value: "dynamic" },
+                                { label: "静态 + 动态", value: "both" }, { label: "模板 (占位符)", value: "template" }
                             ]
                             Component.onCompleted: select(textContentTab.mode)
                             Connections { target: editor; function onRowChanged() { textModeBox.select(textContentTab.mode) } }
@@ -1049,18 +1049,18 @@ PageFrame {
                     }
                     Hint {
                         Layout.leftMargin: editor.labelW
-                        text: textContentTab.mode === "static" ? "固定的文字。"
-                            : textContentTab.mode === "dynamic" ? "游戏里的一个数值，随数据刷新。"
-                            : textContentTab.mode === "both" ? "固定文字后面接一个数值，例如「某 Buff：」+ 这个 Buff 的剩余时间。"
-                            : "文字里用 {…} 放数值，可以有多个数据来源。例：「{技力} / {上限}」「剩余 {剩余:mm:ss}」「{层数}层」「{HP} · {百分比2}」。"
+                        text: textContentTab.mode === "static" ? "固定显示指定文本"
+                            : textContentTab.mode === "dynamic" ? "跟随游戏数据实时更新的单项数值"
+                            : textContentTab.mode === "both" ? "固定前缀组合单项数值（如：「Buff名称: 」+ 剩余时间）"
+                            : "使用 {…} 占位符组合多项数据（如：「{技力}/{上限}」、「{层数}层」）"
                     }
                     FieldRow {
                         visible: textContentTab.mode !== "dynamic"
-                        label: textContentTab.mode === "template" ? "模板" : "静态文字"
+                        label: textContentTab.mode === "template" ? "模板" : "静态文本"
                         EditField {
                             Layout.fillWidth: true
-                            placeholderText: textContentTab.mode === "both" ? "例：某 Buff："
-                                           : textContentTab.mode === "template" ? "例：{技力} / {上限}" : "要显示的文字"
+                            placeholderText: textContentTab.mode === "both" ? "如：攻击力提升: "
+                                           : textContentTab.mode === "template" ? "如：{技力} / {上限}" : "显示文本内容"
                             value: editor.value("staticText", "")
                             onCommitted: t => editor.roleChanged("staticText", t)
                         }
@@ -1069,13 +1069,13 @@ PageFrame {
                         visible: textContentTab.mode === "template"
                         Layout.leftMargin: editor.labelW
                         textFormat: Text.PlainText
-                        text: "占位符：{数值}（也可写 {技力} {HP} {终结技} {失衡}）、{上限}、{百分比}、{层数}、{剩余}（剩余秒数）、{自动}。"
-                              + "后面加数字取第几个来源：{数值2}、{2}（= {自动2}）；加格式：{剩余:mm:ss}、{剩余:ss}、{数值:0.0}。不认识的 {…} 原样显示。"
-                              + "\n现在：" + (editor.textState.hidden ? "（隐藏：有占位符没有数值）" : editor.textState.text)
+                        text: "占位符：{数值}（或 {技力} {HP} {终结技} {失衡}）、{上限}、{百分比}、{层数}、{剩余}、{自动}。"
+                              + "支持多数据源后缀（如 {数值2}）及格式化（如 {剩余:mm:ss}、{数值:0.0}）。"
+                              + "\n当前预览：" + (editor.textState.hidden ? "（无数据时隐藏）" : editor.textState.text)
                     }
                     Section {
                         visible: textContentTab.mode !== "static"
-                        text: textContentTab.mode === "template" ? "数据来源 1" : "动态内容"
+                        text: textContentTab.mode === "template" ? "动态数据源 1" : "动态数据源"
                     }
                     ConditionFields {
                         visible: textContentTab.mode !== "static"
@@ -1088,7 +1088,7 @@ PageFrame {
                     }
                     FieldRow {
                         visible: textContentTab.mode !== "static"
-                        label: textContentTab.mode === "template" ? "数值小数位" : "显示"
+                        label: textContentTab.mode === "template" ? "小数位数" : "显示格式"
                         ThemeComboBox {
                             id: showBox
                             visible: textContentTab.mode !== "template"
@@ -1101,7 +1101,7 @@ PageFrame {
                             Layout.leftMargin: Theme.gap
                             Layout.preferredWidth: 8 * Theme.unit
                             visible: textContentTab.mode !== "template" && editor.textSource.show !== "auto" && editor.textSource.show !== "stacks"
-                            text: "小数位"
+                            text: "小数位数"
                             color: Theme.textDim
                         }
                         NumberField {
@@ -1121,7 +1121,7 @@ PageFrame {
                             spacing: Theme.unit
                             RowLayout {
                                 Layout.fillWidth: true
-                                Section { text: "数据来源 " + (moreBlock.index + 2) }
+                                Section { text: "动态数据源 " + (moreBlock.index + 2) }
                                 Item { Layout.fillWidth: true }
                                 FlatButton {
                                     text: "移除"
@@ -1150,19 +1150,19 @@ PageFrame {
                     FlatButton {
                         visible: textContentTab.mode === "template"
                         Layout.leftMargin: editor.labelW
-                        text: "＋ 数据来源"
+                        text: "＋ 添加数据源"
                         onClicked: editor.setTextSource("more", editor.textSource.more.concat([Triggers.makeCondition("hp")]))
                     }
                     Hint {
                         visible: textContentTab.mode !== "static" && textContentTab.mode !== "template"
                         Layout.leftMargin: editor.labelW
-                        text: "自动和数值：Buff / 技能 / 连携技是剩余秒数，其余是当前值（HP 5595、技力 237）。数值 / 上限：5595 / 5950。只有「百分比」显示 94%。"
+                        text: "自动/数值：Buff/技能显示剩余秒数，其他显示当前值。「数值与上限」显示具体比例；「百分比」显示如 94%。"
                     }
                     FieldRow {
                         visible: textContentTab.mode !== "static"
-                        label: "没有数值时"
+                        label: "无数据处理"
                         CheckRow {
-                            text: textContentTab.mode === "template" ? "隐藏整个文本（任一占位符没有数值时）" : "隐藏整个文本"
+                            text: textContentTab.mode === "template" ? "任一占位符缺少数据时隐藏整个文本" : "无数据时隐藏整个文本"
                             on: editor.textSource.hideEmpty
                             onClicked: editor.setTextSource("hideEmpty", !editor.textSource.hideEmpty)
                         }
@@ -1170,7 +1170,7 @@ PageFrame {
                             visible: !editor.textSource.hideEmpty
                             Layout.leftMargin: Theme.gap
                             Layout.preferredWidth: 8 * Theme.unit
-                            text: "改显示"
+                            text: "回退文本"
                             color: Theme.textDim
                         }
                         EditField {
@@ -1178,15 +1178,15 @@ PageFrame {
                             Layout.preferredWidth: 16 * Theme.unit
                             placeholderText: "留空"
                             value: editor.textSource.empty
-                            ToolTip.visible: hovered && textContentTab.mode === "template"
-                            ToolTip.text: "模板里没有数值的那个占位符改显示这个"
+                            ToolTip.visible: hovered
+                            ToolTip.text: "占位符无数据时替换显示的占位文本（留空表示不显示）。"
                             onCommitted: t => editor.setTextSource("empty", t)
                         }
                     }
                     Hint {
                         visible: textContentTab.mode !== "static"
                         Layout.leftMargin: editor.labelW
-                        text: "没有数值：未连接、Buff 不在、没有锁定目标等。预览关掉「按触发器显示」时显示为 --，方便摆放。"
+                        text: "未连接 Bridge、Buff 不存在或无锁定目标时触发无数据状态。预览「显示全部控件」时统一显示为 --。"
                     }
                 }
                 // ---- 内容 (buff list)
@@ -1196,9 +1196,9 @@ PageFrame {
                     width: parent.width
                     spacing: Theme.unit
 
-                    Section { text: "显示谁的 Buff"; Layout.topMargin: 0 }
+                    Section { text: "监控目标"; Layout.topMargin: 0 }
                     FieldRow {
-                        label: "单位"
+                        label: "目标"
                         Choice {
                             role: "buffUnit"; fallback: "main"
                             model: Triggers.squadUnits.concat([{ label: "锁定目标", value: "target" }])
@@ -1209,52 +1209,52 @@ PageFrame {
                         label: "类型"
                         Choice {
                             role: "buffKind"; fallback: "all"
-                            model: [{ label: "全部", value: "all" }, { label: "只看增益（Buff）", value: "buff" },
-                                    { label: "只看减益（Debuff）", value: "debuff" }]
+                            model: [{ label: "全部", value: "all" }, { label: "仅 Buff (增益)", value: "buff" },
+                                    { label: "仅 Debuff (减益)", value: "debuff" }]
                         }
                     }
                     FieldRow {
-                        label: "施加者"
+                        label: "来源"
                         Choice {
                             role: "buffSource"; fallback: "any"
-                            model: [{ label: "任意", value: "any" }, { label: "我方", value: "squad" },
-                                    { label: "敌方", value: "enemy" }, { label: "持有者自己", value: "self" }]
+                            model: [{ label: "任意来源", value: "any" }, { label: "我方单位", value: "squad" },
+                                    { label: "敌方单位", value: "enemy" }, { label: "仅限自身", value: "self" }]
                         }
                     }
                     FieldRow {
-                        label: "最多显示"
+                        label: "最大显示数量"
                         NumberField {
                             from: 1; to: 32; unit: "个"
                             value: editor.value("buffMax", 8)
                             onCommitted: v => editor.roleChanged("buffMax", v)
                         }
                     }
-                    Section { text: "筛选（可选）" }
+                    Section { text: "条件过滤" }
                     FieldRow {
-                        label: "只显示"
+                        label: "白名单 (仅显示)"
                         EditField {
                             id: buffOnlyField
                             Layout.fillWidth: true
-                            placeholderText: "留空 = 全部；多个 Buff id 用逗号分开"
+                            placeholderText: "留空表示不过滤；多个 Buff ID 使用逗号分隔。"
                             value: editor.value("buffOnly", "")
                             onCommitted: t => editor.roleChanged("buffOnly", t.trim())
                         }
                     }
                     FieldRow {
-                        label: "不显示"
+                        label: "黑名单 (忽略)"
                         EditField {
                             Layout.fillWidth: true
-                            placeholderText: "这些 Buff id 不显示（例：常驻的被动）"
+                            placeholderText: "留空表示不过滤；多个 Buff ID 使用逗号分隔。"
                             value: editor.value("buffExclude", "")
                             onCommitted: t => editor.roleChanged("buffExclude", t.trim())
                         }
                     }
                     Hint {
                         Layout.leftMargin: editor.labelW
-                        text: "按获得的先后排列：新的排在后面，结束的移走、后面的往前补。"
-                              + (editor.buffNow.length > 0 ? "现在有：" + editor.buffNow.map(b => b.buffId).join("、")
-                                 : BridgeReader.status === "online" || BridgeReader.status === "stale" ? "现在没有符合的 Buff。"
-                                 : "Bridge 未连接。")
+                        text: "按获取时间排序：新 Buff 顺延排列，失效 Buff 移除后自动补位。"
+                              + (editor.buffNow.length > 0 ? "当前：" + editor.buffNow.map(b => b.buffId).join("、")
+                                 : BridgeReader.status === "online" || BridgeReader.status === "stale" ? "当前无匹配 Buff"
+                                 : "Bridge 未连接")
                     }
                 }
 
@@ -1265,17 +1265,17 @@ PageFrame {
                     width: parent.width
                     spacing: Theme.unit
 
-                    Section { text: "排列"; Layout.topMargin: 0 }
+                    Section { text: "布局排列"; Layout.topMargin: 0 }
                     FieldRow {
                         label: "方向"
                         Choice {
                             role: "buffGrow"; fallback: "right"
-                            model: [{ label: "向右排", value: "right" }, { label: "向左排", value: "left" },
-                                    { label: "向下排", value: "down" }, { label: "向上排", value: "up" }]
+                            model: [{ label: "向右", value: "right" }, { label: "向左", value: "left" },
+                                    { label: "向下", value: "down" }, { label: "向上", value: "up" }]
                         }
                     }
                     FieldRow {
-                        label: "格子"
+                        label: "单元格尺寸"
                         NumberField {
                             from: 12; to: 200; unit: "px"
                             value: editor.value("buffCell", 40)
@@ -1293,12 +1293,12 @@ PageFrame {
                             onCommitted: v => editor.roleChanged("buffSpacing", v)
                         }
                     }
-                    Hint { Layout.leftMargin: editor.labelW; text: "控件框按「最多显示」个格子自动算；第一个 Buff 在框的起点（向左排在右端，向上排在底端）。" }
+                    Hint { Layout.leftMargin: editor.labelW; text: "自动根据「最大显示数量」计算控件框尺寸。" }
 
-                    Section { text: "颜色" }
-                    ColorRow { label: "增益"; colorRole: "borderColor"; opacityRole: "borderOpacity" }
+                    Section { text: "颜色样式" }
+                    ColorRow { label: "Buff 颜色"; colorRole: "borderColor"; opacityRole: "borderOpacity" }
                     FieldRow {
-                        label: "减益"
+                        label: "Debuff 颜色"
                         ColorField {
                             id: debuffSwatch
                             color: editor.value("debuffColor", "#e5484d")
@@ -1306,7 +1306,7 @@ PageFrame {
                         }
                     }
                     FieldRow {
-                        label: "填充"
+                        label: "背景填充"
                         SliderField { role: "fillOpacity"; fallback: 22 }
                     }
                     FieldRow {
@@ -1317,24 +1317,24 @@ PageFrame {
                             onCommitted: v => editor.roleChanged("borderWidth", v)
                         }
                     }
-                    Hint { Layout.leftMargin: editor.labelW; text: "格子的边框和填充用增益 / 减益的颜色；已过去的时间用暗色从上往下盖住。" }
+                    Hint { Layout.leftMargin: editor.labelW; text: "单元格边框与填充色按 Buff/Debuff 类型区分；已消耗时间以遮罩形式覆盖。" }
 
-                    Section { text: "文字" }
+                    Section { text: "文本显示" }
                     FieldRow {
                         label: "显示"
                         CheckRow { text: "剩余时间"; role: "showTimer"; fallback: true }
                         CheckRow { Layout.leftMargin: Theme.gap; text: "层数"; role: "showStacks"; fallback: true }
                     }
                     FieldRow {
-                        label: "Buff 名"
+                        label: "Buff 名称"
                         Choice {
                             role: "buffLabel"; fallback: "none"
-                            model: [{ label: "简写（id 最后两段）", value: "short" }, { label: "完整 id", value: "full" },
+                            model: [{ label: "简写 ID", value: "short" }, { label: "完整 ID", value: "full" },
                                     { label: "不显示", value: "none" }]
                         }
                     }
                     FieldRow {
-                        label: "时间字号"
+                        label: "倒计时字号"
                         NumberField {
                             from: 6; to: 200; unit: "px"
                             value: editor.value("valueSize", 20)
@@ -1382,7 +1382,7 @@ PageFrame {
                     width: parent.width
                     spacing: Theme.unit
 
-                    Section { text: "文字"; Layout.topMargin: 0 }
+                    Section { text: "文本样式"; Layout.topMargin: 0 }
                     ColorRow { label: "颜色"; colorRole: "textColor"; opacityRole: "textOpacity" }
                     FieldRow {
                         label: "字号"
@@ -1391,13 +1391,13 @@ PageFrame {
                             value: editor.value("fontSize", 24)
                             onCommitted: v => editor.roleChanged("fontSize", v)
                         }
-                        CheckRow { Layout.leftMargin: Theme.gap; text: "粗体"; role: "fontBold"; fallback: true }
+                        CheckRow { Layout.leftMargin: Theme.gap; text: "加粗"; role: "fontBold"; fallback: true }
                     }
                     FieldRow {
-                        label: "对齐"
+                        label: "对齐方式"
                         Choice {
                             role: "textAlign"; fallback: "center"
-                            model: [{ label: "居左", value: "left" }, { label: "居中", value: "center" }, { label: "居右", value: "right" }]
+                            model: [{ label: "靠左", value: "left" }, { label: "居中", value: "center" }, { label: "靠右", value: "right" }]
                         }
                     }
                     FieldRow {
@@ -1441,7 +1441,7 @@ PageFrame {
                             onCommitted: v => editor.roleChanged("boxHeight", v)
                         }
                     }
-                    Hint { Layout.leftMargin: editor.labelW; text: "文字在框里垂直居中，按「对齐」靠左、居中或靠右；超出框的部分照常画出。" }
+                    Hint { Layout.leftMargin: editor.labelW; text: "文本在控件框内垂直居中，水平按「对齐方式」对齐；超出控件框部分正常绘制。" }
                 }
 
                 // ---- group
@@ -1455,22 +1455,22 @@ PageFrame {
 
                     Hint {
                         visible: groupTab.empty
-                        text: "组还是空的：在左侧把控件拖到组那一行的中间即可加入。"
+                        text: "当前组为空：请在左侧列表中将控件拖入本组。"
                     }
-                    Section { text: "整体"; Layout.topMargin: 0 }
+                    Section { text: "全局变换"; Layout.topMargin: 0 }
                     FieldRow {
                         label: "不透明度"
                         SliderField { role: "groupOpacity"; fallback: 100 }
                     }
                     FieldRow {
-                        label: "缩放"
+                        label: "全局缩放"
                         SliderField { role: "groupScale"; from: 10; to: 300; fallback: 100 }
                     }
                     Hint {
                         Layout.leftMargin: editor.labelW
-                        text: "作用于组内所有控件，和它们自己的设置相乘。缩放以组的左上角为原点。"
+                        text: "全局缩放与透明度调整，与子控件独立参数叠加。缩放原点为组左上角。"
                     }
-                    Section { text: "位置" }
+                    Section { text: "组位置" }
                     FieldRow {
                         label: "位置"
                         enabled: !groupTab.empty
@@ -1487,7 +1487,7 @@ PageFrame {
                         }
                     }
                     FieldRow {
-                        label: "范围"
+                        label: "组外接边界"
                         Label {
                             text: groupTab.empty ? "—" : Math.round(groupTab.g.bw) + " × " + Math.round(groupTab.g.bh)
                                   + "（" + groupTab.g.n + " 个控件）"
@@ -1496,7 +1496,7 @@ PageFrame {
                     }
                     Hint {
                         Layout.leftMargin: editor.labelW
-                        text: "组内所有控件的外接矩形（缩放后）。改位置会把所有成员一起移动；在预览窗口里选中组后也可以直接拖动。"
+                        text: "包含组内所有子控件的外接矩形。移动组将同步移动所有子控件。"
                     }
                 }
             }

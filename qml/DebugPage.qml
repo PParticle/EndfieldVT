@@ -8,10 +8,10 @@ import QtQuick.Layouts
 // live state).
 PageFrame {
     id: page
-    title: "调试"
+    title: "调试控制台"
     subtitle: BridgeReader.status === "online"
               ? "EndfieldDataBridge " + BridgeReader.info.abi + " · 会话 " + BridgeReader.info.session
-                + " · 采样 " + BridgeReader.info.sampleIntervalMs + " ms"
+                + " · 采样率 " + BridgeReader.info.sampleIntervalMs + " ms"
               : "EndfieldDataBridge：" + BridgeReader.statusText
 
     readonly property bool live: BridgeReader.status === "online" || BridgeReader.status === "stale"
@@ -122,7 +122,7 @@ PageFrame {
             Meter {
                 Layout.fillWidth: true
                 visible: unit.row.hasPoise === true
-                label: unit.row.broken ? "失衡" + (unit.row.recovering ? " · 恢复 " + page.secs(unit.row.recoveryLeft) : "")
+                label: unit.row.broken ? (unit.row.recovering ? "失衡恢复 " + page.secs(unit.row.recoveryLeft) : "失衡")
                                        : "失衡值"
                 text: page.num(unit.row.poise) + " / " + page.num(unit.row.poiseMax)
                 fraction: page.ratio(unit.row.poise, unit.row.poiseMax)
@@ -175,9 +175,9 @@ PageFrame {
                 onMineChanged: buffRepeater.shown += mine ? 1 : -1
                 ToolTip.visible: hover.hovered
                 ToolTip.delay: 300
-                ToolTip.text: buffId + (parentBuffId ? "\n父 Buff：" + parentBuffId : "")
-                              + "\n施加者：" + source + (rootSource !== source ? "\n追溯施加者：" + rootSource : "")
-                              + "\n时间流速：" + page.num(dilation, 2)
+                ToolTip.text: buffId + (parentBuffId ? "\n父 Buff: " + parentBuffId : "")
+                              + "\n来源: " + source + (rootSource !== source ? "\n最初来源: " + rootSource : "")
+                              + "\n时间速率: " + page.num(dilation, 2)
                 HoverHandler { id: hover }
                 Rectangle {   // remaining time behind the row
                     visible: !buff.infinite && buff.duration > 0
@@ -223,7 +223,7 @@ PageFrame {
     Label {
         visible: !page.live
         anchors.centerIn: parent
-        text: BridgeReader.statusText + "。启动游戏并启用 EndfieldDataBridge 插件后，这里会显示实时数据。"
+        text: BridgeReader.statusText + "。请启动游戏并加载 EndfieldDataBridge 插件。"
         color: Theme.textFaint
     }
 
@@ -279,12 +279,12 @@ PageFrame {
                             }
                         }
                     }
-                    Fact { text: "每格 " + page.num(BridgeReader.team.atbPerCell) }
+                    Fact { text: "单格 " + page.num(BridgeReader.team.atbPerCell) }
                 }
             }
 
             Card {
-                title: "当前操控 / 锁定目标"
+                title: "主控与目标"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 RowLayout {
@@ -319,8 +319,8 @@ PageFrame {
                         spacing: Theme.unit / 2
                         readonly property var target: BridgeReader.lockTarget
                         Fact {
-                            text: !BridgeReader.team.lockUid ? "锁定目标"
-                                  : "锁定目标 · " + (BridgeReader.team.lockMode ? "手动锁定" : BridgeReader.team.autoLock ? "自动锁定" : "已锁定")
+                            text: !BridgeReader.team.lockUid ? "目标状态"
+                                  : "目标状态 · " + (BridgeReader.team.lockMode ? "手动锁定" : BridgeReader.team.autoLock ? "自动锁定" : "已锁定")
                         }
                         Label {
                             text: parent.target.name || "无"
@@ -331,11 +331,11 @@ PageFrame {
                         }
                         Fact {
                             Layout.fillWidth: true
-                            text: parent.target.missing ? "单位表里还没有这个目标"
+                            text: parent.target.missing ? "目标不在单位列表中"
                                   : parent.target.hp !== undefined
                                     ? "HP " + page.num(parent.target.hp) + " / " + page.num(parent.target.hpMax)
                                       + (parent.target.hasPoise ? "　失衡值 " + page.num(parent.target.poise) + " / " + page.num(parent.target.poiseMax)
-                                         + (parent.target.broken ? "（失衡）" : "") : "")
+                                         + (parent.target.broken ? " (失衡)" : "") : "")
                                     : ""
                         }
                     }
@@ -351,8 +351,8 @@ PageFrame {
             spacing: Theme.gap
 
             Card {
-                title: "小队"
-                note: BridgeReader.info.buffsPartial ? "启用前已有的 Buff 可能缺失" : ""
+                title: "队伍状态"
+                note: BridgeReader.info.buffsPartial ? "插件加载前已存在的 Buff 可能无法追溯" : ""
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 ScrollView {
@@ -373,7 +373,7 @@ PageFrame {
                                 visible: model.present
                                 row: model
                                 heading: (model.slot + 1) + "号位 " + model.name
-                                badge: model.isMain ? "操控中" : ""
+                                badge: model.isMain ? "控制中" : ""
                                 extra: Component {
                                     Column {
                                         spacing: Theme.unit / 2
@@ -400,13 +400,13 @@ PageFrame {
             }
 
             Card {
-                title: "敌人"
-                note: BridgeReader.info.headBarUnits === false ? "头顶血条数据不可用" : BridgeReader.units.count + " 个"
+                title: "敌方状态"
+                note: BridgeReader.info.headBarUnits === false ? "血条数据不可用" : BridgeReader.units.count + " 个"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Label {
                     visible: BridgeReader.units.count === 0
-                    text: "视野内没有带血条的单位"
+                    text: "视野内未检测到目标"
                     color: Theme.textFaint
                     font.pixelSize: Theme.caption
                 }
@@ -438,7 +438,7 @@ PageFrame {
         // ---- bottom: events
         Card {
             id: eventsCard
-            title: "事件"
+            title: "事件日志"
             note: (BridgeReader.lostEvents > 0 ? "丢失 " + BridgeReader.lostEvents + " 条　" : "")
                   + (BridgeReader.info.skillCasts === false ? "技能事件不可用" : "")
             Layout.fillWidth: true
@@ -451,7 +451,7 @@ PageFrame {
                 height: Theme.rowH
                 spacing: 0
                 Repeater {
-                    model: ["技能释放", "Buff 变化"]
+                    model: ["技能释放事件", "Buff 变更事件"]
                     AbstractButton {
                         required property int index
                         required property string modelData
@@ -536,7 +536,7 @@ PageFrame {
                 }
                 Label {
                     visible: parent.count === 0
-                    text: "还没有技能事件"
+                    text: "暂无技能事件"
                     color: Theme.textFaint
                     font.pixelSize: Theme.caption
                 }
@@ -563,7 +563,7 @@ PageFrame {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: Theme.gap
                         Fact { width: 7 * Theme.unit; text: page.num(bev.time, 2) + " s"; horizontalAlignment: Text.AlignRight }
-                        Fact { width: 5 * Theme.unit; text: bev.kind; color: bev.kind === "结束" ? Theme.textDim : Theme.accent }
+                        Fact { width: 5 * Theme.unit; text: bev.kind; color: bev.kind === "移除" ? Theme.textDim : Theme.accent }
                         Fact { width: 20 * Theme.unit; text: bev.owner }
                         Fact { width: 40 * Theme.unit; text: bev.buffId; color: Theme.text; elide: Text.ElideMiddle }
                         Fact { text: (bev.stacks > 1 ? "×" + bev.stacks + "　" : "") + bev.reason }
@@ -571,7 +571,7 @@ PageFrame {
                 }
                 Label {
                     visible: parent.count === 0
-                    text: "还没有 Buff 事件"
+                    text: "暂无 Buff 事件"
                     color: Theme.textFaint
                     font.pixelSize: Theme.caption
                 }

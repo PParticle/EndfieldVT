@@ -143,7 +143,7 @@ Rectangle {
                 text: card.conditions.map(c => Triggers.label(c.type)).join(card.field("mode", "all") === "any" ? " 或 " : " + ")
                       + (card.forBar ? (card.field("drives", true) ? "  →  进度" : "") : card.forText ? "  →  显示"
                          : card.effect !== "none" || !Triggers.hasStyle(card.trigger) ? "  →  " + Triggers.effectLabel(card.effect) : "")
-                      + (Triggers.hasStyle(card.trigger) ? "  →  样式" : "")
+                      + (Triggers.hasStyle(card.trigger) ? "  →  自定义样式" : "")
                 font.weight: Font.DemiBold
                 elide: Text.ElideRight
             }
@@ -162,14 +162,14 @@ Rectangle {
                 id: modeBox
                 visible: card.conditions.length > 1
                 Layout.preferredWidth: 20 * Theme.unit
-                model: [{ label: "全部满足", value: "all" }, { label: "任一满足", value: "any" }]
+                model: [{ label: "全部满足 (AND)", value: "all" }, { label: "任一满足 (OR)", value: "any" }]
                 Component.onCompleted: select(card.field("mode", "all"))
                 Connections { target: card; function onTriggerChanged() { modeBox.select(card.field("mode", "all")) } }
                 onActivated: card.set("mode", currentValue)
             }
             Item { Layout.fillWidth: true }
             FlatButton {
-                text: "＋ 条件"
+                text: "＋ 添加条件"
                 onClicked: card.set("conditions", card.conditions.concat([Triggers.makeCondition("combat")]))
             }
         }
@@ -201,7 +201,7 @@ Rectangle {
                     Label {
                         Layout.fillWidth: true
                         text: (condBlock.part.active ? "● 满足  " : "○ 不满足  ") + (condBlock.part.note || "")
-                              + (condBlock.index === 0 && card.conditions.length > 1 && !card.forText ? "（进度和数字取自这一条）" : "")
+                              + (condBlock.index === 0 && card.conditions.length > 1 && !card.forText ? "（进度与数值优先取自此条件）" : "")
                         color: condBlock.part.active ? Theme.accent : condBlock.part.available === false ? Theme.textFaint : Theme.textDim
                         font.pixelSize: Theme.caption
                         elide: Text.ElideRight
@@ -217,21 +217,21 @@ Rectangle {
         }
 
         Rectangle { visible: !card.forText; Layout.fillWidth: true; Layout.topMargin: Theme.unit / 2; implicitHeight: 1; color: Theme.line }
-        Section_ { visible: !card.forText; text: card.forBar ? "进度" : "触发效果" }
+        Section_ { visible: !card.forText; text: card.forBar ? "进度规则" : "触发效果" }
         Row_ {
             label: "效果"
             visible: !card.forBar && !card.forText
             Choice { field: "effect"; fallback: "none"; model: Triggers.effects }
         }
         Row_ {
-            label: "扩散方式"
+            label: "扩散模式"
             visible: card.effect === "radial"
             ThemeComboBox {
                 id: spreadBox
                 Layout.preferredWidth: 30 * Theme.unit
                 model: [
-                    { label: "图标保持，叠加扩散一层颜色", value: "overlay" },
-                    { label: "图标本身从无变大", value: "self" }
+                    { label: "图标保持并叠加扩散层", value: "overlay" },
+                    { label: "图标整体放缩", value: "self" }
                 ]
                 Component.onCompleted: select(card.spread)
                 Connections { target: card; function onTriggerChanged() { spreadBox.select(card.spread) } }
@@ -259,7 +259,7 @@ Rectangle {
             }
         }
         Row_ {
-            label: "起点"
+            label: "起始角度"
             visible: card.sweep
             NumberField {
                 from: 0; to: 359; unit: "°"
@@ -268,18 +268,18 @@ Rectangle {
             }
             Label {
                 Layout.leftMargin: Theme.unit
-                text: "0° 为正上方，顺时针增加"
+                text: "0° 为正上方，顺时针增加。"
                 color: Theme.textFaint
                 font.pixelSize: Theme.caption
             }
         }
         Row_ {
-            label: "进度"
+            label: "进度驱动"
             visible: !card.forBar && card.effect !== "none"
             Choice {
                 field: "timing"; fallback: "follow"
                 model: [
-                    { label: "跟随条件（剩余时间、冷却、充能）", value: "follow" },
+                    { label: "跟随触发条件", value: "follow" },
                     { label: "满足时播放一次动画", value: "play" }
                 ]
             }
@@ -289,26 +289,26 @@ Rectangle {
         Row_ {
             label: "给出进度"
             visible: card.forBar
-            Toggle { field: "drives"; fallback: true; label: "用这个触发器的数值填充进度条" }
+            Toggle { field: "drives"; fallback: true; label: "使用该触发器的数值驱动进度条。" }
         }
         Row_ {
-            label: "进度范围"
+            label: "范围"
             visible: card.forBar && card.field("drives", true)
             Choice {
                 field: "range"; fallback: "full"
-                model: [{ label: "0 到上限", value: "full" }, { label: "自定范围", value: "part" }]
+                model: [{ label: "0 至上限", value: "full" }, { label: "自定义范围", value: "part" }]
             }
             NumberField {
                 visible: card.field("range", "full") === "part"
                 Layout.leftMargin: Theme.unit
-                from: -100000; to: 100000; unit: "从"
+                from: -100000; to: 100000; unit: "小"
                 value: card.field("rangeFrom", 0)
                 onCommitted: v => card.set("rangeFrom", v)
             }
             NumberField {
                 visible: card.field("range", "full") === "part"
                 Layout.leftMargin: Theme.unit
-                from: -100000; to: 100000; unit: "到"
+                from: -100000; to: 100000; unit: "大"
                 value: card.field("rangeTo", 100)
                 onCommitted: v => card.set("rangeTo", v)
             }
@@ -320,12 +320,12 @@ Rectangle {
             wrapMode: Text.WordWrap
             color: Theme.textFaint
             font.pixelSize: Theme.caption
-            text: "第一条条件的数值（技力、HP、剩余秒数…）在这个范围里时按比例填充，低于「从」为空，高于「到」为满。"
-                  + " 当前数值 " + (card.result.value !== undefined ? Math.round(card.result.value * 10) / 10 : "-")
+            text: "数值在此范围内按比例填充，低于最小值为空，高于最大值为满。"
+                  + "当前数值 " + (card.result.value !== undefined ? Math.round(card.result.value * 10) / 10 : "-")
                   + " → " + Math.round(Math.max(0, Math.min(1, Triggers.barProgress(card.trigger, card.result))) * 100) + "%"
         }
         Row_ {
-            label: "反向"
+            label: "反向填充"
             visible: (card.forBar && card.field("drives", true)) || (card.effect !== "none" && card.timing === "follow")
             AbstractButton {
                 id: rev
@@ -354,7 +354,7 @@ Rectangle {
                     x: box.width + Theme.unit
                     height: parent.height
                     verticalAlignment: Text.AlignVCenter
-                    text: "随剩余时间增加（冷却转好时填满）"
+                    text: "反向计算进度（如：随剩余冷却时间减少而填满）。"
                 }
             }
         }
@@ -368,11 +368,11 @@ Rectangle {
             }
         }
         Row_ {
-            label: "播放完"
+            label: "播放完毕"
             visible: card.effect !== "none" && card.timing === "play"
             Choice {
                 field: "after"; fallback: "keep"
-                model: [{ label: "保持显示", value: "keep" }, { label: "消失", value: "hide" }]
+                model: [{ label: "保持显示", value: "keep" }, { label: "隐藏", value: "hide" }]
             }
         }
         Label {
@@ -383,24 +383,23 @@ Rectangle {
             color: Theme.textFaint
             font.pixelSize: Theme.caption
             text: card.forBar
-                ? "条件满足时，进度条显示它的进度：Buff 和技能释放是剩余时间比例，连携技是剩余冷却比例，其余是当前值 / 上限。"
+                ? "触发满足时，进度条展示对应数值：Buff 与技能展示剩余时间比例，连携技展示冷却比例，其他展示当前值/上限。"
                 : card.timing === "play"
-                ? "条件从不满足变为满足时，" + Triggers.effectLabel(card.effect)
-                  + (card.effect === "radial" ? (card.spread === "self" ? "（图标从无变大）" : "（叠加一层扩散）") : "") + "在 "
-                  + card.field("playSeconds", 0.4) + " 秒内从 0 播放到完整，之后"
-                  + (card.field("after", "keep") === "hide" ? "图标消失，直到触发器再次满足。" : "保持完整显示。")
-                : "进度取自条件：Buff 和技能释放是剩余时间比例，连携技是剩余冷却比例，其余是当前值 / 上限。"
+                ? "状态由不满足变为满足时，" + Triggers.effectLabel(card.effect) + " 在 "
+                  + card.field("playSeconds", 0.4) + " 秒内播放一次，之后 "
+                  + (card.field("after", "keep") === "hide" ? "图标消失，等待下次触发。" : "保持显示。")
+                : "动画进度跟随触发条件：Buff/技能显示剩余时间比例，连携技显示冷却比例，其他显示当前值/上限。"
         }
 
         // Style while the trigger holds.
         Rectangle { Layout.fillWidth: true; Layout.topMargin: Theme.unit / 2; implicitHeight: 1; color: Theme.line }
         Section_ { text: "满足时样式" }
         Row_ {
-            label: "改颜色"
+            label: "覆盖颜色"
             Toggle {
                 field: "tint"
-                label: card.kind === "icon" ? "边框和填充" : card.kind === "bar" ? "进度颜色"
-                     : card.kind === "text" ? "文字颜色" : card.kind === "buffs" ? "格子颜色" : "成员的颜色"
+                label: card.kind === "icon" ? "边框与背景" : card.kind === "bar" ? "进度颜色"
+                     : card.kind === "text" ? "文本颜色" : card.kind === "buffs" ? "单元格颜色" : "子控件颜色"
             }
             ColorField {
                 id: tintSwatch
@@ -419,13 +418,13 @@ Rectangle {
             }
             Label {
                 Layout.leftMargin: Theme.unit
-                text: "100% 为不变"
+                text: "100% 为不改变不透明度。"
                 color: Theme.textFaint
                 font.pixelSize: Theme.caption
             }
         }
         Row_ {
-            label: "发光"
+            label: "高亮发光"
             Choice { field: "glow"; fallback: "none"; model: Triggers.glows }
             ColorField {
                 id: glowSwatch
@@ -455,7 +454,7 @@ Rectangle {
             Label {
                 visible: card.field("loop", "none") !== "none"
                 Layout.leftMargin: Theme.unit
-                text: "一个周期"
+                text: "单次循环时长。"
                 color: Theme.textFaint
                 font.pixelSize: Theme.caption
             }
@@ -466,9 +465,7 @@ Rectangle {
             wrapMode: Text.WordWrap
             color: Theme.textFaint
             font.pixelSize: Theme.caption
-            text: "只在这个触发器满足时生效；多个满足时，后面的覆盖前面的。"
-                  + (card.kind === "group" ? "组的样式作用到每个成员上，成员自己的样式优先。"
-                     : card.forBar ? "只改样式、不想影响进度时，把「给出进度」关掉。" : "")
+            text: "仅当该触发器满足时生效；多触发器同时满足时，后方样式覆盖前方。组样式作用于所有成员，成员独立样式优先。"
         }
     }
 }

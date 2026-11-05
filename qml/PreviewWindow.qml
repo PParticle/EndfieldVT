@@ -14,8 +14,8 @@ AppWindow {
     signal selected(string id)
     signal moved(string id, real x, real y)
     signal groupMoved(string id, real x, real y)   // the group's frame, drawn position
-    subtitle: "预览/编辑"
-    title: "EndfieldVT 预览/编辑"
+    subtitle: "预览与编辑"
+    title: "EndfieldVT 预览与编辑"
     width: 1280 + 2 * frameWidth
     height: 720 + Theme.titleBarH + 2 * frameWidth
     minimumWidth: 800 + 2 * frameWidth
@@ -30,7 +30,7 @@ AppWindow {
     property bool live: true
     actions: [
         TitleAction {
-            text: preview.live ? "按触发器显示" : "全部显示"
+            text: preview.live ? "仅显示满足项" : "显示全部控件"
             checked: preview.live
             onClicked: preview.live = !preview.live
         },
@@ -41,7 +41,7 @@ AppWindow {
             Slider {
                 id: density; objectName: "gridDensity"; width: 20 * Theme.unit; height: parent.height
                 from: 0; to: 100; stepSize: 1; value: 40
-                Accessible.name: "网格密度"; Accessible.description: "0% 隐藏网格，100% 最密；只用来对照位置，不吸附"
+                Accessible.name: "网格密度"; Accessible.description: "0% 隐藏，100% 最密；仅供对齐参考，无吸附功能。"
                 background: Rectangle {
                     x: density.leftPadding
                     y: Math.round(density.topPadding + (density.availableHeight - height) / 2)

@@ -205,8 +205,8 @@ Popup {
             Layout.fillWidth: true
             spacing: Theme.unit
             Item { Layout.fillWidth: true }
-            FlatButton { text: "还原"; onClicked: { picker.setFrom(picker.initial); picker.emitCurrent() } }
-            FlatButton { text: "完成"; accent: true; onClicked: picker.close() }
+            FlatButton { text: "重置"; onClicked: { picker.setFrom(picker.initial); picker.emitCurrent() } }
+            FlatButton { text: "确认"; accent: true; onClicked: picker.close() }
         }
     }
 

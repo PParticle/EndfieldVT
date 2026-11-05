@@ -7,7 +7,7 @@ PageFrame {
     signal createRequested(string kind)
 
     title: "新建"
-    subtitle: "选择要创建的控件类型"
+    subtitle: "请选择创建的控件类型："
 
     ScrollView {
         id: choicesView
@@ -24,11 +24,11 @@ PageFrame {
 
             Repeater {
                 model: [
-                    { kind: "icon", title: "图标", desc: "自定义图形，有可选的显示效果" },
-                    { kind: "bar", title: "进度条", desc: "剩余时间或资源量" },
-                    { kind: "text", title: "文本", desc: "显示数值或自定义文字，可为动态内容" },
-                    { kind: "buffs", title: "Buff 列表", desc: "某个单位身上所有的 Buff，按获得先后排成一排" },
-                    { kind: "group", title: "组", desc: "新建一个空组，在左侧把控件拖进去" },
+                    { kind: "icon", title: "图标", desc: "自定义图形与动画提示" },
+                    { kind: "bar", title: "进度条", desc: "展示时间、资源与冷却状态" },
+                    { kind: "text", title: "文本", desc: "展示动态数值或自定义文字" },
+                    { kind: "buffs", title: "Buff列表", desc: "监控目标的 Buff/Debuff 状态列表" },
+                    { kind: "group", title: "组", desc: "用于批量管理与控制子控件" },
                 ]
                 KindRow {
                     required property var modelData

@@ -24,7 +24,7 @@ AppWindow {
     // their group directly. The sidebar shows the same order as a tree.
     ListModel { id: store }
 
-    readonly property var kindNames: ({ icon: "图标", bar: "进度条", text: "文本", buffs: "Buff 列表", group: "组" })
+    readonly property var kindNames: ({ icon: "图标", bar: "进度条", text: "文本", buffs: "Buff列表", group: "组" })
 
     function indexOfId(id) {
         if (id === "") return -1
@@ -484,7 +484,7 @@ AppWindow {
         const text = ConfigFile.read()
         try {
             const data = JSON.parse(text)
-            if (!data || !Array.isArray(data.controls)) throw new Error("不是 EndfieldVT 的配置（没有 controls）")
+            if (!data || !Array.isArray(data.controls)) throw new Error("配置格式无效（缺失 controls 字段）")
             for (const c of data.controls) store.append(migrate(c))
             for (let i = 0; i < store.count; ++i) {
                 if (store.get(i).kind === "bar") fitBarBox(i)
@@ -495,21 +495,21 @@ AppWindow {
             loaded = true
         } catch (e) {
             store.clear()
-            status.flash(ConfigFile.name + ".json 读取失败，修改不会保存：" + (ConfigFile.lastError || e.message), 0)
+            status.flash("配置文件 " + ConfigFile.name + ".json 加载失败（修改不会保存）：" + (ConfigFile.lastError || e.message), 0)
         }
     }
     // Saves what is pending in the current config.
     function flush() {
         if (!saveTimer.running) return
         saveTimer.stop()
-        if (loaded && !ConfigFile.write(serialize())) status.flash("保存失败：" + ConfigFile.lastError, 0)
+        if (loaded && !ConfigFile.write(serialize())) status.flash("配置保存失败：" + ConfigFile.lastError, 0)
     }
     function switchConfig(name) {
         if (name === ConfigFile.name) return
         flush()
         if (!ConfigFile.open(name)) { status.flash(ConfigFile.lastError, 0); return }
         load()
-        if (loaded) status.flash("已切换到配置「" + name + "」")
+        if (loaded) status.flash("已加载配置文件：「" + name + "」")
     }
     // A new config: empty, or a copy of the current one. Opened right away.
     function createConfig(name, copy) {
@@ -524,7 +524,7 @@ AppWindow {
         id: saveTimer
         interval: 300
         onTriggered: {
-            if (!ConfigFile.write(root.serialize())) status.flash("保存失败：" + ConfigFile.lastError, 0)
+            if (!ConfigFile.write(root.serialize())) status.flash("配置保存失败：" + ConfigFile.lastError, 0)
         }
     }
     Connections {
@@ -582,7 +582,7 @@ AppWindow {
                 color: Theme.line
             }
         },
-        TitleAction { text: "预览/编辑"; onClicked: root.showPreview() },
+        TitleAction { text: "预览与编辑"; onClicked: root.showPreview() },
         TitleAction { text: "游戏内显示"; checked: root.overlayOn; onClicked: root.overlayOn = !root.overlayOn },
         TitleAction { text: "调试"; checked: root.page === "debug"; onClicked: root.togglePage("debug") }
     ]
@@ -620,7 +620,7 @@ AppWindow {
                     Label {
                         anchors.horizontalCenter: parent.horizontalCenter
                         y: Math.round((parent.height - height) * 2 / 5)
-                        text: "从左侧选择一个控件，或点击「新建」"
+                        text: "请在左侧选择控件，或点击「新建」"
                         color: Theme.textFaint
                     }
                 }
@@ -639,7 +639,7 @@ AppWindow {
         }
         StatusBar {
             id: status
-            gameText: !root.overlayOn ? "游戏内显示：关" : overlay.tracker.stateText
+            gameText: !root.overlayOn ? "游戏内覆盖层：已禁用" : overlay.tracker.stateText
             gameActive: overlay.tracker.visible
             Layout.fillWidth: true
             Layout.preferredHeight: Theme.statusBarH

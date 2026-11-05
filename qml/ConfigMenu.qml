@@ -22,8 +22,8 @@ TitleAction {
     // ---- the menu: configs, a line, then the commands. Built as one list:
     // a Menu puts Repeater items after its static ones, whatever the order.
     readonly property var entries: configs.map(n => ({ kind: "config", name: n }))
-        .concat([{ kind: "line" }, { kind: "new", name: "新建配置…" }, { kind: "copy", name: "复制当前…" },
-                 { kind: "folder", name: "打开文件夹" }])
+        .concat([{ kind: "line" }, { kind: "new", name: "新建配置..." }, { kind: "copy", name: "复制当前配置..." },
+                 { kind: "folder", name: "打开配置文件夹" }])
     Popup {
         id: menu
         function popup(parentItem, x, y) { menu.x = x; menu.y = y; open() }
@@ -89,8 +89,8 @@ TitleAction {
         }
         function accept() {
             const name = nameField.text.trim()
-            if (!ConfigFile.validName(name)) { error = "名称不能为空，也不能含 \\ / : * ? \" < > |"; return }
-            if (button.configs.includes(name)) { error = "已经有叫「" + name + "」的配置"; return }
+            if (!ConfigFile.validName(name)) { error = "配置名称不能为空，且不能包含字符 \\ / : * ? \" < > |"; return }
+            if (button.configs.includes(name)) { error = "已存在名为「" + name + "」的配置文件"; return }
             close()
             button.createRequested(name, copy)
         }
@@ -101,13 +101,13 @@ TitleAction {
         background: Rectangle { color: Theme.surface; border.color: Theme.lineStrong }
         contentItem: ColumnLayout {
             spacing: Theme.unit
-            Label { text: namePopup.copy ? "复制当前配置为" : "新建空配置"; font.weight: Font.DemiBold }
+            Label { text: namePopup.copy ? "复制当前配置" : "创建新配置"; font.weight: Font.DemiBold }
             RowLayout {
                 spacing: Theme.unit
                 ThemeTextField {
                     id: nameField
                     Layout.preferredWidth: 28 * Theme.unit
-                    placeholderText: "配置名称"
+                    placeholderText: "配置文件名"
                     onAccepted: namePopup.accept()
                 }
                 Label { text: ".json"; color: Theme.textDim }
@@ -122,7 +122,7 @@ TitleAction {
                 Layout.alignment: Qt.AlignRight
                 spacing: Theme.unit
                 FlatButton { text: "取消"; onClicked: namePopup.close() }
-                FlatButton { text: namePopup.copy ? "复制并打开" : "新建并打开"; accent: true; onClicked: namePopup.accept() }
+                FlatButton { text: namePopup.copy ? "复制并加载" : "创建并加载"; accent: true; onClicked: namePopup.accept() }
             }
         }
     }

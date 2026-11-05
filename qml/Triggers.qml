@@ -39,16 +39,16 @@ import QtQuick
 //     loop: "none" | "pulse" | "breathe" | "blink" | "shake" | "spin", loopSeconds
 QtObject {
     readonly property var types: [
-        { value: "buff", label: "Buff / Debuff", desc: "某个单位身上有（或没有）指定的 Buff" },
-        { value: "atb", label: "技力", desc: "技力值或满格数" },
-        { value: "ultimate", label: "终结技充能", desc: "终结技充能达到条件或已充满" },
-        { value: "combo", label: "连携技", desc: "释放连携技后的冷却，或冷却完毕" },
-        { value: "hp", label: "HP", desc: "单位的 HP（数值；比较时按百分比）" },
-        { value: "poise", label: "失衡", desc: "单位处于失衡，或失衡值达到条件" },
-        { value: "lock", label: "锁定目标", desc: "有（或没有）锁定的目标" },
-        { value: "combat", label: "战斗状态", desc: "小队在战斗中（或不在）" },
-        { value: "skillCast", label: "技能释放", desc: "释放技能后的一段时间" },
-        { value: "always", label: "始终", desc: "不依赖游戏数据，一直满足" },
+        { value: "buff", label: "Buff/Debuff", desc: "目标身上存在（或不存在）指定 Buff/Debuff" },
+        { value: "atb", label: "战技技力", desc: "战技技力值或可用格数" },
+        { value: "ultimate", label: "终结技", desc: "终结技充能状态或已就绪" },
+        { value: "combo", label: "连携技", desc: "连携技冷却状态或已就绪" },
+        { value: "hp", label: "生命值(HP)", desc: "目标的生命值（百分比判定）" },
+        { value: "poise", label: "韧性(失衡)", desc: "目标失衡状态或失衡值" },
+        { value: "lock", label: "锁定目标", desc: "是否存在已锁定的目标" },
+        { value: "combat", label: "战斗状态", desc: "小队处于战斗状态中" },
+        { value: "skillCast", label: "技能释放", desc: "释放指定技能后的一段时间内" },
+        { value: "always", label: "始终满足", desc: "忽略游戏数据，始终判定为满足" },
     ]
     function label(type) {
         for (const t of types) if (t.value === type) return t.label
@@ -68,11 +68,11 @@ QtObject {
 
     readonly property var glows: [
         { label: "无", value: "none" }, { label: "外发光", value: "soft" },
-        { label: "流光（沿边框转圈）", value: "flow" }, { label: "像素边框", value: "pixel" }
+        { label: "沿边框流光", value: "flow" }, { label: "像素边框", value: "pixel" }
     ]
     readonly property var loops: [
-        { label: "无", value: "none" }, { label: "脉冲（放大缩小）", value: "pulse" },
-        { label: "呼吸（渐隐渐显）", value: "breathe" }, { label: "闪烁", value: "blink" },
+        { label: "无", value: "none" }, { label: "脉冲 (缩放)", value: "pulse" },
+        { label: "呼吸 (透明度)", value: "breathe" }, { label: "闪烁", value: "blink" },
         { label: "抖动", value: "shake" }, { label: "旋转", value: "spin" }
     ]
     // What the active triggers' styles add up to: { tint, alpha, glow,
@@ -106,11 +106,11 @@ QtObject {
 
     readonly property var motions: [
         { label: "无", value: "none" }, { label: "淡入淡出", value: "fade" },
-        { label: "滑动", value: "slide" }, { label: "弹出 / 缩回", value: "pop" }
+        { label: "滑动", value: "slide" }, { label: "弹出缩回", value: "pop" }
     ]
     readonly property var slideFroms: [
-        { label: "从下方", value: "down" }, { label: "从上方", value: "up" },
-        { label: "从左边", value: "left" }, { label: "从右边", value: "right" }
+        { label: "自下方", value: "down" }, { label: "自上方", value: "up" },
+        { label: "自左侧", value: "left" }, { label: "自右侧", value: "right" }
     ]
     function parseMotion(m) {
         const ok = v => ["fade", "slide", "pop"].includes(v) ? v : "none"
@@ -123,9 +123,9 @@ QtObject {
 
     // Which units each type can watch.
     readonly property var squadUnits: [
-        { label: "主控干员", value: "main" }, { label: "1 号位", value: "slot1" }, { label: "2 号位", value: "slot2" },
-        { label: "3 号位", value: "slot3" }, { label: "4 号位", value: "slot4" },
-        { label: "每个小队成员 ×4", value: "each" }
+        { label: "主控干员", value: "main" }, { label: "1号位", value: "slot1" }, { label: "2号位", value: "slot2" },
+        { label: "3号位", value: "slot3" }, { label: "4号位", value: "slot4" },
+        { label: "队伍成员 ×4", value: "each" }
     ]
     // ---- per-unit expansion
     // A control any of whose conditions (or a buff list's unit) is "each"
@@ -153,12 +153,12 @@ QtObject {
         return { x: d === "right" ? k : d === "left" ? -k : 0, y: d === "down" ? k : d === "up" ? -k : 0 }
     }
     readonly property var buffUnits: squadUnits.concat([
-        { label: "任意小队成员", value: "anySquad" }, { label: "锁定目标", value: "target" },
-        { label: "任意敌人", value: "anyEnemy" }
+        { label: "任意队伍成员", value: "anySquad" }, { label: "锁定目标", value: "target" },
+        { label: "任意敌方", value: "anyEnemy" }
     ])
     readonly property var hpUnits: squadUnits.concat([{ label: "锁定目标", value: "target" }])
     readonly property var castUnits: squadUnits.concat([
-        { label: "任意小队成员", value: "anySquad" }, { label: "任意敌人", value: "anyEnemy" }
+        { label: "任意队伍成员", value: "anySquad" }, { label: "任意敌方", value: "anyEnemy" }
     ])
     readonly property var compareOps: [
         { label: "不比较", value: "any" }, { label: "≥", value: ">=" }, { label: ">", value: ">" }, { label: "≤", value: "<=" },
@@ -287,8 +287,8 @@ QtObject {
     // Lock and combat have no value to show.
     readonly property var textTypes: types.filter(t => !["always", "lock", "combat"].includes(t.value))
     readonly property var textShows: [
-        { label: "自动（剩余时间、技力等）", value: "auto" }, { label: "数值", value: "value" },
-        { label: "数值 / 上限", value: "ratio" }, { label: "百分比", value: "percent" },
+        { label: "自动", value: "auto" }, { label: "数值", value: "value" },
+        { label: "数值与上限", value: "ratio" }, { label: "百分比", value: "percent" },
         { label: "层数", value: "stacks" }
     ]
     function makeTextSource(type) {

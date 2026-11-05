@@ -69,7 +69,7 @@ ColumnLayout {
     }
 
     Row_ {
-        label: "单位"
+        label: "监控目标"
         visible: ["buff", "ultimate", "combo", "hp", "poise", "skillCast"].includes(card.type)
         Choice {
             field: "unit"
@@ -82,30 +82,30 @@ ColumnLayout {
 
     // buff
     Row_ {
-        label: "Buff id"
+        label: "Buff ID"
         visible: card.type === "buff"
         EditField {
             id: buffIds
             Layout.fillWidth: true
-            placeholderText: "多个 id 用逗号分开"
+            placeholderText: "多个 ID 使用逗号分隔"
             value: card.field("buffIds", "")
             onCommitted: t => card.set("buffIds", t.trim())
         }
         FlatButton {
             Layout.leftMargin: Theme.unit
-            text: "从当前选择"
+            text: "从当前 Buff 选择"
             enabled: { BridgeReader.tick; return BridgeReader.buffIds().length > 0 }
             onClicked: idMenu.popupFor(BridgeReader.buffIds(), "buffIds")
         }
     }
     Row_ {
-        label: "施加者"
+        label: "来源"
         visible: card.type === "buff"
         Choice {
             field: "source"; fallback: "any"
             model: [
-                { label: "任意", value: "any" }, { label: "我方", value: "squad" },
-                { label: "敌方", value: "enemy" }, { label: "持有者自己", value: "self" }
+                { label: "任意来源", value: "any" }, { label: "我方单位", value: "squad" },
+                { label: "敌方单位", value: "enemy" }, { label: "仅限自身", value: "self" }
             ]
         }
     }
@@ -168,18 +168,18 @@ ColumnLayout {
         Layout.leftMargin: card.labelW
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
-        text: "Buff 在、而且层数 / 剩余时间也满足时才算满足。例：剩余时间 ≤ 3 s + 条件样式变红 = 快结束时变红。永久 Buff 的剩余时间按无穷大算。"
+        text: "需同时满足 Buff 存在及层数/剩余时间条件。永久 Buff 剩余时间按无限大计算。"
         color: Theme.textFaint
         font.pixelSize: Theme.caption
     }
 
     // atb
     Row_ {
-        label: "计量"
+        label: "计量方式"
         visible: card.type === "atb"
         Choice {
             field: "measure"; fallback: "sp"
-            model: [{ label: "技力值（0–上限）", value: "sp" }, { label: "满格数（0–3 格）", value: "cells" }]
+            model: [{ label: "技力数值 (0–上限)", value: "sp" }, { label: "可用格数 (0–3格)", value: "cells" }]
         }
     }
     // ultimate
@@ -188,7 +188,7 @@ ColumnLayout {
         visible: card.type === "ultimate" && !card.valueOnly
         Choice {
             field: "measure"; fallback: "ready"
-            model: [{ label: "充满（就绪）", value: "ready" }, { label: "充能值比较", value: "value" }]
+            model: [{ label: "已就绪 (充满)", value: "ready" }, { label: "充能值", value: "value" }]
         }
     }
     // combo
@@ -197,7 +197,7 @@ ColumnLayout {
         visible: card.type === "combo" && !card.valueOnly
         Choice {
             field: "show"; fallback: "cooling"
-            model: [{ label: "冷却中（释放后）", value: "cooling" }, { label: "冷却完毕", value: "ready" }]
+            model: [{ label: "冷却中", value: "cooling" }, { label: "冷却完毕 (就绪)", value: "ready" }]
         }
     }
     // poise
@@ -206,7 +206,7 @@ ColumnLayout {
         visible: card.type === "poise"
         Choice {
             field: "show"; fallback: "broken"
-            model: [{ label: "处于失衡", value: "broken" }, { label: "失衡值比较（%）", value: "value" }]
+            model: [{ label: "处于失衡状态", value: "broken" }, { label: "失衡值百分比", value: "value" }]
         }
     }
     // lock
@@ -216,8 +216,8 @@ ColumnLayout {
         Choice {
             field: "show"; fallback: "locked"
             model: [
-                { label: "有锁定目标", value: "locked" }, { label: "手动锁定", value: "manual" },
-                { label: "没有锁定目标", value: "none" }
+                { label: "存在锁定目标", value: "locked" }, { label: "手动锁定", value: "manual" },
+                { label: "无锁定目标", value: "none" }
             ]
         }
     }
@@ -228,7 +228,7 @@ ColumnLayout {
         visible: card.type === "combat"
         Choice {
             field: "show"; fallback: "in"
-            model: [{ label: "战斗中", value: "in" }, { label: "不在战斗", value: "out" }]
+            model: [{ label: "战斗中", value: "in" }, { label: "非战斗状态", value: "out" }]
         }
     }
     Label {
@@ -236,8 +236,8 @@ ColumnLayout {
         Layout.leftMargin: card.labelW
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
-        text: BridgeReader.info.inFight ? "取自游戏自己的战斗状态：按波次刷怪时，下一波出来前也算战斗中。"
-                                        : "当前的 Bridge 没有战斗状态（需要 ABI 1.3），暂按「有锁定目标、有敌人血条、或 5 秒内小队放过技能」估算。"
+        text: BridgeReader.info.inFight ? "基于游戏内部战斗状态判定：波次刷新间隔期间仍判定为战斗中。"
+                                        : "当前 Bridge 未提供战斗状态接口，基于目标锁定、血条显示或近期技能释放情况综合估算。"
         color: Theme.textFaint
         font.pixelSize: Theme.caption
     }
@@ -248,7 +248,7 @@ ColumnLayout {
                  || (type === "ultimate" && field("measure", "ready") === "value")
                  || (type === "poise" && field("show", "broken") === "value"))
     Row_ {
-        label: "比较"
+        label: "比较运算符"
         visible: card.hasThreshold
         Choice {
             Layout.preferredWidth: 15 * Theme.unit
@@ -270,12 +270,12 @@ ColumnLayout {
             color: Theme.textFaint
             font.pixelSize: Theme.caption
             text: card.field("op", ">=") === "any"
-                  ? "只读数值，总是满足：给进度条的进度、文本的数字用"
-                  : card.type === "hp" ? "按 HP 占上限的百分比判断，例：≤ 30% = 残血提示"
-                  : card.type === "poise" ? "按失衡值占上限的百分比判断"
-                  : card.type === "atb" && card.field("measure", "sp") === "cells" ? "按满格数判断（每格 = 技力上限 / 格数），例：≥ 2 格 = 够放两次战技"
-                  : card.type === "atb" ? "按技力值判断，例：≥ 100"
-                  : "按充能值判断"
+                  ? "仅读取数值供文本/进度条使用，结果始终满足"
+                  : card.type === "hp" ? "按 HP 百分比判定（例如：≤ 30% 提示残血）"
+                  : card.type === "poise" ? "按失衡条百分比判定"
+                  : card.type === "atb" && card.field("measure", "sp") === "cells" ? "按可释放次数判定（例如：≥ 2 格）"
+                  : card.type === "atb" ? "按具体技力值判定"
+                  : "按充能数值判定"
         }
     }
 
@@ -286,23 +286,23 @@ ColumnLayout {
         Choice {
             field: "skillType"; fallback: "any"
             model: [
-                { label: "任意", value: "any" }, { label: "战技", value: "normal" },
+                { label: "任意类型", value: "any" }, { label: "战技", value: "normal" },
                 { label: "连携技", value: "combo" }, { label: "终结技", value: "ultimate" }
             ]
         }
     }
     Row_ {
-        label: "技能 id"
+        label: "技能 ID"
         visible: card.type === "skillCast"
         EditField {
             Layout.fillWidth: true
-            placeholderText: "留空 = 任意技能；多个用逗号分开"
+            placeholderText: "留空表示任意技能；多个 ID 使用逗号分隔"
             value: card.field("skillId", "")
             onCommitted: t => card.set("skillId", t.trim())
         }
         FlatButton {
             Layout.leftMargin: Theme.unit
-            text: "从最近释放"
+            text: "从最近释放选择"
             // re-checked on every read
             enabled: { BridgeReader.tick; return BridgeReader.skillIds().length > 0 }
             onClicked: idMenu.popupFor(BridgeReader.skillIds(), "skillId")
@@ -326,7 +326,7 @@ ColumnLayout {
             target = field
             while (count > 0) takeItem(0).destroy()
             for (const id of ids) addItem(entry.createObject(idMenu, { text: id }))
-            if (ids.length === 0) addItem(entry.createObject(idMenu, { text: "（当前没有）", enabled: false }))
+            if (ids.length === 0) addItem(entry.createObject(idMenu, { text: "（当前无可选数据）", enabled: false }))
             popup()
         }
         topPadding: 1

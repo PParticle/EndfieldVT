@@ -64,10 +64,10 @@ void GameWindow::setOverlay(QWindow* window)
 
 QString GameWindow::stateText() const
 {
-    if (m_state == "foreground") return QString("游戏在前台 · %1×%2%3").arg(m_nativeSize.width()).arg(m_nativeSize.height()).arg(m_fullscreen ? " 无边框全屏" : " 窗口");
-    if (m_state == "background") return QString("游戏在后台 · %1×%2%3").arg(m_nativeSize.width()).arg(m_nativeSize.height()).arg(m_fullscreen ? " 无边框全屏" : " 窗口");
+    if (m_state == "foreground") return QString("游戏位于前台 · %1×%2%3").arg(m_nativeSize.width()).arg(m_nativeSize.height()).arg(m_fullscreen ? " 无边框全屏" : " 窗口化");
+    if (m_state == "background") return QString("游戏位于后台 · %1×%2%3").arg(m_nativeSize.width()).arg(m_nativeSize.height()).arg(m_fullscreen ? " 无边框全屏" : " 窗口化");
     if (m_state == "minimized") return "游戏已最小化";
-    return "未找到游戏窗口";
+    return "未检测到游戏窗口";
 }
 
 // Never activated, off the taskbar and Alt+Tab. Click-through comes from the

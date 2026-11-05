@@ -123,12 +123,12 @@ QString SkillTypeText(int type)
 {
     switch (type) {
     case EFB_SKILL_NORMAL: return "战技";
-    case EFB_SKILL_ATTACH: return "附着";
+    case EFB_SKILL_ATTACH: return "附加技能";
     case EFB_SKILL_COMBO: return "连携技";
     case EFB_SKILL_ULTIMATE: return "终结技";
     case EFB_SKILL_EXTRA_ACTIVE: return "额外主动";
     case EFB_SKILL_PASSIVE: return "被动";
-    case EFB_SKILL_ATTACK: return "普攻";
+    case EFB_SKILL_ATTACK: return "普通攻击";
     case EFB_SKILL_BREAKING_ATTACK: return "重击";
     case EFB_SKILL_DODGE: return "闪避";
     default: return QString("类型 %1").arg(type);
@@ -139,30 +139,30 @@ QString SkillTypeText(int type)
 QString FinishTypeText(int type)
 {
     switch (type) {
-    case 0: return "完成";
-    case 1: return "打断";
-    default: return QString("结束 %1").arg(type);
+    case 0: return "正常完成";
+    case 1: return "中途打断";
+    default: return QString("结束类型 %1").arg(type);
     }
 }
 QString InterruptText(int reason)
 {
     switch (reason) {
     case 2: return "AI";
-    case 5: return "被动作打断";
-    case 7: return "下一技能";
-    case 9: return "剧情";
+    case 5: return "被其他动作打断";
+    case 7: return "技能连招打断";
+    case 9: return "剧情打断";
     default: return QString("原因 %1").arg(reason);
     }
 }
 QString FinishReasonText(int reason)
 {
     switch (reason) {
-    case EFB_FINISH_LIFETIME: return "到期";
-    case EFB_FINISH_IGNITE: return "引爆";
+    case EFB_FINISH_LIFETIME: return "自然到期";
+    case EFB_FINISH_IGNITE: return "触发引爆";
     case EFB_FINISH_EARLY: return "提前结束";
-    case EFB_FINISH_DISPELLED: return "驱散";
-    case EFB_FINISH_ABSORBED: return "吸收";
-    case EFB_FINISH_LOST: return "未收到结束通知";
+    case EFB_FINISH_DISPELLED: return "被驱散";
+    case EFB_FINISH_ABSORBED: return "伤害吸收";
+    case EFB_FINISH_LOST: return "缺失结束通知";
     case EFB_FINISH_OTHER: return "其他";
     default: return QString("原因 %1").arg(reason);
     }
@@ -170,7 +170,7 @@ QString FinishReasonText(int reason)
 
 QString UnitLabel(const EFB_Unit& u, const QHash<uint32_t, QString>& names)
 {
-    if (!u.instance_uid) return "（已消失）";
+    if (!u.instance_uid) return "(已移除)";
     if (u.char_index >= 0) return QString("%1号位 %2").arg(u.char_index + 1).arg(names.value(u.instance_uid, ShortName(u.entity_name)));
     return names.value(u.instance_uid, ShortName(u.entity_name));
 }
@@ -228,7 +228,7 @@ BridgeReader::~BridgeReader() = default;
 QString BridgeReader::statusText() const
 {
     if (m_status == "online") return "已连接";
-    if (m_status == "stale") return "已连接，数据未更新";
+    if (m_status == "stale") return "已连接 (数据未更新)";
     if (m_status == "disabled") return "插件已停用";
     if (m_status == "gone") return "游戏已退出";
     if (m_status == "incompatible") return "Bridge 版本不兼容";
@@ -450,8 +450,8 @@ void BridgeReader::poll()
                     length = t - d->castStart.take(p.skill_cast_id);
                 }
                 QString caster = p.char_index >= 0
-                    ? QString("%1号位 %2").arg(p.char_index + 1).arg(d->names.value(p.caster_uid, QString("uid %1").arg(p.caster_uid)))
-                    : d->names.value(p.caster_uid, QString("uid %1").arg(p.caster_uid));
+                    ? QString("%1号位 %2").arg(p.char_index + 1).arg(d->names.value(p.caster_uid, QString("UID %1").arg(p.caster_uid)))
+                    : d->names.value(p.caster_uid, QString("UID %1").arg(p.caster_uid));
                 m_skillEvents->prepend({
                     {"serial", qulonglong(e.serial)}, {"time", t}, {"started", started}, {"caster", caster},
                     {"casterSlot", int(p.char_index)}, {"faction", int(p.faction)},
@@ -463,8 +463,8 @@ void BridgeReader::poll()
                 }, kEventCap);
             } else if (e.type >= EFB_EVENT_BUFF_ADDED && e.type <= EFB_EVENT_BUFF_FINISHED) {
                 const auto p = efb::Payload<EFB_BuffEventPayload>(e);
-                static const char* const kinds[] = {"", "添加", "刷新", "层数", "结束"};
-                QString owner = d->names.value(e.subject_uid, QString("uid %1").arg(e.subject_uid));
+                static const char* const kinds[] = {"", "添加", "刷新", "层数变更", "移除"};
+                QString owner = d->names.value(e.subject_uid, QString("UID %1").arg(e.subject_uid));
                 m_buffEvents->prepend({
                     {"serial", qulonglong(e.serial)}, {"time", t}, {"kind", QString(kinds[e.type])},
                     {"owner", owner}, {"buffId", QString::fromUtf8(p.buff_id)}, {"stacks", p.enhance_cnt},
@@ -603,7 +603,7 @@ QVariantMap BridgeReader::evaluate(const QVariantMap& spec) const
 {
     const QString type = spec.value("type").toString();
     const bool online = m_status == "online" || m_status == "stale";
-    if (type.isEmpty() || type == "always") return Result(true, true, 1, "始终显示");
+    if (type.isEmpty() || type == "always") return Result(true, true, 1, "始终满足");
     if (!online) return Result(false, false, 0, "未连接");
 
     // Which squad slot a unit choice means: "main", "slot1".."slot4".
@@ -623,7 +623,7 @@ QVariantMap BridgeReader::evaluate(const QVariantMap& spec) const
     // ---- buff: present (or missing) on a unit
     if (type == "buff") {
         const QStringList ids = SplitIds(spec.value("buffIds").toString());
-        if (ids.isEmpty()) return Result(true, false, 0, "未填写 Buff id");
+        if (ids.isEmpty()) return Result(true, false, 0, "未填写 Buff ID");
         const QString source = spec.value("source", "any").toString();
         const bool wantMissing = spec.value("show", "present").toString() == "missing";
         const uint32_t lockUid = m_team.value("lockUid").toUInt();
@@ -653,7 +653,7 @@ QVariantMap BridgeReader::evaluate(const QVariantMap& spec) const
             }
         }
         if (wantMissing) {
-            QVariantMap r = Result(true, count == 0, count == 0 ? 1 : 0, count == 0 ? "未找到，显示" : QString("找到 %1 个，隐藏").arg(count));
+            QVariantMap r = Result(true, count == 0, count == 0 ? 1 : 0, count == 0 ? "未找到" : QString("找到 %1 个").arg(count));
             return r;
         }
         if (best.isEmpty()) return Result(true, false, 0, "未找到");
@@ -704,7 +704,7 @@ QVariantMap BridgeReader::evaluate(const QVariantMap& spec) const
             r["text"] = QString::number(left, 'f', 1);
             return r;
         }
-        return Result(true, false, 0, "最近没有释放");
+        return Result(true, false, 0, "最近未释放");
     }
 
     // ---- thresholds: a number against `value`
@@ -743,26 +743,26 @@ QVariantMap BridgeReader::evaluate(const QVariantMap& spec) const
     if (type == "ultimate" || type == "combo") {
         const int slot = slotOf(unit);
         const QVariantMap op_ = squadRow(slot);
-        if (op_.isEmpty()) return Result(false, false, 0, slot < 0 ? "没有主控干员" : "该位置没有干员");
+        if (op_.isEmpty()) return Result(false, false, 0, slot < 0 ? "无主控干员" : "当前位置无干员");
         if (type == "ultimate") {
             const double v = op_.value("ultimate").toDouble(), max = op_.value("ultimateMax").toDouble();
             if (spec.value("measure", "value").toString() == "ready") {
                 const bool ready = max > 0 && v >= max;
-                QVariantMap r = Result(true, ready, max > 0 ? v / max : 0, ready ? "终结技就绪" : QString("终结技 %1 / %2").arg(v, 0, 'f', 0).arg(max, 0, 'f', 0));
+                QVariantMap r = Result(true, ready, max > 0 ? v / max : 0, ready ? "终结技就绪" : QString("充能 %1 / %2").arg(v, 0, 'f', 0).arg(max, 0, 'f', 0));
                 r["value"] = v;
                 r["max"] = max;
                 r["text"] = QString::number(v, 'f', 0);
                 return r;
             }
-            return threshold_(v, max, "终结技", whole(v), v, whole(v));
+            return threshold_(v, max, "充能", QString("%1 / %2").arg(whole(v), whole(max)), v, whole(v));
         }
-        if (!op_.value("hasCombo").toBool()) return Result(false, false, 0, "该干员没有连携技");
+        if (!op_.value("hasCombo").toBool()) return Result(false, false, 0, "该干员无连携技");
         const double left = op_.value("comboLeft").toDouble(), cd = op_.value("comboCooldown").toDouble();
         // "ready": active when the cooldown is over; progress counts down while cooling.
         const bool ready = left <= 0;
         const bool wantCooling = spec.value("show", "ready").toString() == "cooling";
         QVariantMap r = Result(true, wantCooling ? !ready : ready, cd > 0 ? left / cd : 0,
-                               ready ? "连携技就绪" : QString("连携技冷却 %1 s").arg(left, 0, 'f', 1));
+                               ready ? "连携技就绪" : QString("冷却中 %1 s").arg(left, 0, 'f', 1));
         r["timeLeft"] = ready ? -1.0 : left;
         r["value"] = left;
         r["max"] = cd;
@@ -780,29 +780,29 @@ QVariantMap BridgeReader::evaluate(const QVariantMap& spec) const
         if (unit == "target") u = m_lock.value("missing").toBool() ? QVariantMap{} : m_lock;
         else u = squadRow(slotOf(unit));
         if (u.isEmpty() || u.value("hp").toDouble() < 0)
-            return Result(false, false, 0, unit == "target" ? "没有锁定目标" : "没有该单位的数据");
+            return Result(false, false, 0, unit == "target" ? "无锁定目标" : "无单位数据");
         if (type == "hp") {
             const double hp = u.value("hp").toDouble(), max = u.value("hpMax").toDouble();
             // HP is compared in percent ("HP below 30%"), shown as the number.
             const double pct = max > 0 ? hp / max * 100 : 0;
-            return threshold_(hp, max, "HP", QString("%1 / %2（%3%）").arg(whole(hp), whole(max), whole(pct)), pct, whole(hp));
+            return threshold_(hp, max, "HP", QString("%1 / %2 (%3%)").arg(whole(hp), whole(max), whole(pct)), pct, whole(hp));
         }
-        if (!u.value("hasPoise").toBool()) return Result(false, false, 0, "该单位没有失衡条");
+        if (!u.value("hasPoise").toBool()) return Result(false, false, 0, "无失衡条");
         const QString show = spec.value("show", "broken").toString();
         const bool broken = u.value("broken").toBool();
         if (show == "broken") {
-            QVariantMap r = Result(true, broken, broken ? 1 : 0, broken ? "失衡中" : "未失衡");
+            QVariantMap r = Result(true, broken, broken ? 1 : 0, broken ? "失衡状态" : "未失衡");
             const double rec = u.value("recoveryLeft").toDouble();
             if (broken && rec >= 0) {
                 r["timeLeft"] = rec;
                 r["text"] = QString::number(rec, 'f', 1);
-                r["note"] = QString("失衡中 · 恢复 %1 s").arg(rec, 0, 'f', 1);
+                r["note"] = QString("失衡恢复中 %1 s").arg(rec, 0, 'f', 1);
             }
             return r;
         }
         const double poise = u.value("poise").toDouble(), max = u.value("poiseMax").toDouble();
         const double pct = max > 0 ? poise / max * 100 : 0;
-        return threshold_(poise, max, "失衡值", QString("%1 / %2（%3%）").arg(whole(poise), whole(max), whole(pct)), pct, whole(poise));
+        return threshold_(poise, max, "失衡值", QString("%1 / %2 (%3%)").arg(whole(poise), whole(max), whole(pct)), pct, whole(poise));
     }
 
     // In combat: the game's own flag (BattleManager.m_isSquadInFight, Bridge
@@ -814,7 +814,7 @@ QVariantMap BridgeReader::evaluate(const QVariantMap& spec) const
         if (m_info.value("inFight").toBool()) {
             const bool inFight = m_team.value("inFight").toBool();
             const bool active = inFight != wantOut;
-            return Result(true, active, active ? 1 : 0, inFight ? "战斗中" : "非战斗");
+            return Result(true, active, active ? 1 : 0, inFight ? "战斗中" : "非战斗状态");
         }
         const bool locked = m_team.value("lockUid").toUInt() != 0;
         bool headBar = false;
@@ -828,8 +828,8 @@ QVariantMap BridgeReader::evaluate(const QVariantMap& spec) const
         const bool inFight = locked || headBar || recentCast;
         const bool active = inFight != wantOut;
         return Result(true, active, active ? 1 : 0,
-                      inFight ? (locked ? "战斗中（有锁定目标）" : headBar ? "战斗中（有敌人血条）" : "战斗中（刚释放技能）")
-                             : "非战斗（估算）");
+                      inFight ? (locked ? "战斗中 (已锁定目标)" : headBar ? "战斗中 (存在敌人血条)" : "战斗中 (近期释放技能)")
+                             : "非战斗状态 (估算)");
     }
 
     if (type == "lock") {
@@ -838,8 +838,8 @@ QVariantMap BridgeReader::evaluate(const QVariantMap& spec) const
         const bool manual = m_team.value("lockMode").toBool();
         const bool active = show == "manual" ? locked && manual : show == "none" ? !locked : locked;
         return Result(true, active, active ? 1 : 0,
-                      !locked ? "没有锁定目标" : QString("已锁定 %1 · %2").arg(m_lock.value("name").toString(), manual ? "手动" : "自动"));
+                      !locked ? "无锁定目标" : QString("已锁定 %1 (%2)").arg(m_lock.value("name").toString(), manual ? "手动" : "自动"));
     }
 
-    return Result(false, false, 0, "未知的触发器类型 " + type);
+    return Result(false, false, 0, "未知触发器类型 " + type);
 }

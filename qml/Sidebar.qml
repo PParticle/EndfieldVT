@@ -114,7 +114,7 @@ Rectangle {
             Layout.preferredHeight: Theme.rowH
             Layout.leftMargin: Theme.gap
             Layout.rightMargin: Theme.gap
-            Label { text: "控件"; color: Theme.textDim; font.pixelSize: Theme.caption }
+            Label { text: "控件列表"; color: Theme.textDim; font.pixelSize: Theme.caption }
             Item { Layout.fillWidth: true }
             Label { text: side.model ? side.model.count : 0; color: Theme.textDim; font.pixelSize: Theme.caption }
         }
@@ -125,7 +125,7 @@ Rectangle {
             Layout.preferredHeight: Theme.rowH
             leftPadding: Theme.gap
             verticalAlignment: Text.AlignVCenter
-            text: "还没有控件"
+            text: "暂无控件"
             color: Theme.textFaint
         }
 

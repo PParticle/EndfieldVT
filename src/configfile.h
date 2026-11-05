@@ -76,7 +76,7 @@ public:
     // new one after). False, with lastError, when the name is not usable.
     Q_INVOKABLE bool open(const QString& name)
     {
-        if (!validName(name)) return fail("名称不能为空，也不能含 \\ / : * ? \" < > |");
+        if (!validName(name)) return fail("配置名称不能为空，且不能包含字符 \\ / : * ? \" < > |");
         if (name != m_name) {
             m_name = name;
             settings().setValue("config", m_name);
@@ -89,8 +89,8 @@ public:
     // A new config file with `text`; refuses to overwrite one that exists.
     Q_INVOKABLE bool create(const QString& name, const QString& text)
     {
-        if (!validName(name)) return fail("名称不能为空，也不能含 \\ / : * ? \" < > |");
-        if (QFile::exists(fileOf(name))) return fail("已经有叫「" + name + "」的配置");
+        if (!validName(name)) return fail("配置名称不能为空，且不能包含字符 \\ / : * ? \" < > |");
+        if (QFile::exists(fileOf(name))) return fail("已存在名为「" + name + "」的配置文件");
         return writeTo(fileOf(name), text);
     }
 
