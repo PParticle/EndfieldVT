@@ -18,6 +18,15 @@ PageFrame {
     // Main.groupStates: a member's group decides with it.
     property var groupStates: ({})
     readonly property var parentState: { const p = value("parentId", ""); return p !== "" ? groupStates[p] || null : null }
+    // The group's 显示 setting, for the status line.
+    readonly property string parentShow: {
+        revision
+        const p = value("parentId", "")
+        if (p === "" || !model) return ""
+        for (let i = 0; i < model.count; ++i)
+            if (model.get(i).uid === p) return Triggers.parseTriggers(model.get(i).triggers).show
+        return ""
+    }
     readonly property var groupInfo: kind === "group" ? groups[value("uid", "")] || null : null
 
     // model.get() is a snapshot; bumping `revision` on any model change makes
@@ -326,7 +335,8 @@ PageFrame {
                 readonly property bool byGroup: editor.parentState !== null && editor.parentState.hidden === true
                 readonly property bool hidden: editor.triggerState.hidden === true || byGroup
                                                || (editor.kind === "text" && editor.textState.hidden)
-                text: byGroup ? "○ 当前不显示（组的触发器）"
+                text: editor.triggers.show === "never" ? "○ 始终隐藏"
+                    : byGroup ? (editor.parentShow === "never" ? "○ 始终隐藏（所在的组）" : "○ 当前不显示（组的触发器）")
                     : hidden ? (editor.kind === "group" ? "○ 当前整组隐藏" : "○ 当前不显示")
                     : editor.kind === "group"
                       ? (editor.triggerState.driving >= 0 ? "● 组触发器 " + (editor.triggerState.driving + 1) + "：" + Triggers.effectLabel(editor.triggerState.effect)
@@ -420,7 +430,8 @@ PageFrame {
                             Layout.preferredWidth: 36 * Theme.unit
                             model: [
                                 { label: "始终显示，触发器只加效果", value: "always" },
-                                { label: "只在有触发器满足时显示", value: "active" }
+                                { label: "只在有触发器满足时显示", value: "active" },
+                                { label: "始终隐藏", value: "never" }
                             ]
                             Component.onCompleted: select(editor.triggers.show)
                             Connections { target: editor; function onTriggersChanged() { triggerShowBox.select(editor.triggers.show) } }
@@ -429,7 +440,10 @@ PageFrame {
                     }
                     Hint {
                         Layout.leftMargin: editor.labelW
-                        text: editor.kind === "group"
+                        text: editor.triggers.show === "never"
+                              ? (editor.kind === "group" ? "整组都不显示（游戏里和预览的「按触发器显示」里），设置都保留：不删除就先关掉这一组。"
+                                                         : "不显示（游戏里和预览的「按触发器显示」里），设置都保留：不删除就先关掉它。选中时在预览里淡淡显示，方便找到。")
+                              : editor.kind === "group"
                               ? (editor.triggers.show === "always" ? "组内控件照常显示；满足的组触发器把效果加到它们上面。"
                                                                    : "没有组触发器满足时，整组隐藏。例：战斗状态 = 战斗中 → 只在战斗时显示这一组。")
                               : editor.triggers.show === "always"

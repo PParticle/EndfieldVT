@@ -7,11 +7,13 @@ import QtQuick
 // BridgeReader.evaluate(): { type, ...fields }.
 //
 // `triggers` role (JSON): when the control shows, and what it does.
-//   { show: "always" | "active", list: [ { conditions: [condition], mode: "all" | "any",
+//   { show: "always" | "active" | "never", list: [ { conditions: [condition], mode: "all" | "any",
 //       effect, startAngle, spread, spreadColor, spreadOpacity,
 //       timing, playSeconds, after, reverse } ] }
 //   show "always": drawn as styled; triggers only add effects. "active":
 //   drawn only while a trigger is active (no triggers: always drawn).
+//   "never": not drawn at all (in game and in the preview's live view), its
+//   settings kept: a control switched off without deleting it.
 //   A trigger is active when all (or any) of its conditions hold; its
 //   progress, value, stacks and text come from the first condition.
 //   effect "radial" (中心扩散) has two kinds (`spread`):
@@ -136,7 +138,7 @@ QtObject {
         try { d = JSON.parse(text || "") } catch (e) {}
         const list = d && Array.isArray(d.list) ? d.list : []
         // Files are migrated when read (Main.migrate); skip anything else.
-        return { show: d && d.show === "active" ? "active" : "always",
+        return { show: d && (d.show === "active" || d.show === "never") ? d.show : "always",
                  list: list.filter(t => t && Array.isArray(t.conditions)) }
     }
     // A trigger against the data: the first condition's result (progress,
@@ -151,26 +153,28 @@ QtObject {
 
     // A bar: the first active trigger gives the progress (`reverse`
     // applies). No triggers: full. None active: empty, or hidden with
-    // show "active".
+    // show "active". Show "never": hidden.
     function runBar(reader, text) {
         const d = parseTriggers(text)
         const results = d.list.map(t => evaluateTrigger(reader, t))
-        if (d.list.length === 0) return { progress: 1, text: "", stacks: 0, hidden: false, results: results, driving: -1 }
+        const never = d.show === "never"
+        if (d.list.length === 0) return { progress: 1, text: "", stacks: 0, hidden: never, results: results, driving: -1 }
         for (let i = 0; i < d.list.length; ++i) {
             if (!results[i].active) continue
             const p = Math.max(0, Math.min(1, barProgress(d.list[i], results[i])))
             return { progress: d.list[i].reverse ? 1 - p : p, text: results[i].text || "",
-                     stacks: results[i].stacks || 0, hidden: false, results: results, driving: i }
+                     stacks: results[i].stacks || 0, hidden: never, results: results, driving: i }
         }
         return { progress: 0, text: "", stacks: 0, hidden: d.show === "active", results: results, driving: -1 }
     }
-    // A text: shown unless show "active" and no trigger is active.
+    // A text: shown unless show "never", or "active" and no trigger is active.
     function runText(reader, text) {
         const d = parseTriggers(text)
         const results = d.list.map(t => evaluateTrigger(reader, t))
         let driving = -1
         for (let i = 0; i < results.length && driving < 0; ++i) if (results[i].active) driving = i
-        return { hidden: d.show === "active" && d.list.length > 0 && driving < 0, results: results, driving: driving }
+        return { hidden: d.show === "never" || (d.show === "active" && d.list.length > 0 && driving < 0),
+                 results: results, driving: driving }
     }
 
     // ---- text
@@ -256,7 +260,8 @@ QtObject {
         }
         state.since.length = triggers.length
         const out = { effect: "none", progress: 1, startAngle: 0, spread: "overlay", spreadColor: "#ffffff",
-                      spreadOpacity: 70, hidden: d.show === "active" && triggers.length > 0 && !anyActive,
+                      spreadOpacity: 70,
+                      hidden: d.show === "never" || (d.show === "active" && triggers.length > 0 && !anyActive),
                       playing: false, stacks: 0, text: "", results: results, driving: drive === null ? -1 : drive }
         if (drive === null) return out
         const t = triggers[drive], r = results[drive]
