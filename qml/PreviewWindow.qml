@@ -7,6 +7,7 @@ import QtQuick.Controls.Basic
 AppWindow {
     id: preview
     property ListModel model
+    property ListModel copies        // slots 2-4 of expanded controls (Main.copyStore)
     property var groups: ({})
     property var groupStates: ({})
     property string selectedId
@@ -137,6 +138,45 @@ AppWindow {
                             preview.moved(object.uid,
                                 Math.round(Math.max(0, Math.min(1280 - object.boxWidth, nx))),
                                 Math.round(Math.max(0, Math.min(720 - object.boxHeight, ny))))
+                        }
+                    }
+                }
+            }
+            // Slots 2-4 of an expanded control: selecting or dragging one is
+            // selecting or dragging the control (they share its uid and position).
+            Repeater {
+                model: preview.copies || 0
+                delegate: ControlView {
+                    id: copy
+                    required property int slotOfCopy
+                    required property int copyOf
+                    copySlot: slotOfCopy
+                    designScale: canvas.designScale
+                    groups: preview.groups
+                    groupStates: preview.groupStates
+                    editing: true
+                    live: preview.live
+                    selected: preview.selectedId === uid
+                    count: preview.model ? preview.model.count : 0
+                    z: count - copyOf
+                    property real dragOriginX: 0
+                    property real dragOriginY: 0
+                    TapHandler { onTapped: preview.selected(copy.uid) }
+                    DragHandler {
+                        target: null
+                        onActiveChanged: {
+                            if (!active) return
+                            copy.dragOriginX = copy.posX
+                            copy.dragOriginY = copy.posY
+                            preview.selected(copy.uid)
+                        }
+                        onActiveTranslationChanged: {
+                            if (!active) return
+                            const nx = copy.dragOriginX + activeTranslation.x / copy.drawScale
+                            const ny = copy.dragOriginY + activeTranslation.y / copy.drawScale
+                            preview.moved(copy.uid,
+                                Math.round(Math.max(0, Math.min(1280 - copy.boxWidth, nx))),
+                                Math.round(Math.max(0, Math.min(720 - copy.boxHeight, ny))))
                         }
                     }
                 }

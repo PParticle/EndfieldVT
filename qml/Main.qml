@@ -47,6 +47,8 @@ AppWindow {
         return {
             // An icon starts at 64 x 64; a bar as a 长条 (its box is fitted
             // to it on creation).
+            // 每个小队成员: the 4 copies' direction and spacing.
+            expandDir: "down", expandGap: 8,
             boxWidth: kind === "icon" ? 64 : kind === "bar" ? 240 : 160,
             boxHeight: kind === "icon" ? 64 : kind === "bar" ? 24 : 56,
             shape: "square", shapeAngle: 0, iconSize: 75,
@@ -130,10 +132,13 @@ AppWindow {
             const c = store.get(i)
             const g = out[c.parentId]
             if (!g) continue
-            const r = c.posX + c.boxWidth, b = c.posY + c.boxHeight
-            if (g.n++ === 0) { g.left = c.posX; g.top = c.posY; g.right = r; g.bottom = b }
+            // An expanded member: its last copy too.
+            const far = Triggers.usesEach(c) ? Triggers.expandOffset(c, 4) : { x: 0, y: 0 }
+            const l = c.posX + Math.min(0, far.x), t = c.posY + Math.min(0, far.y)
+            const r = c.posX + c.boxWidth + Math.max(0, far.x), b = c.posY + c.boxHeight + Math.max(0, far.y)
+            if (g.n++ === 0) { g.left = l; g.top = t; g.right = r; g.bottom = b }
             else {
-                g.left = Math.min(g.left, c.posX); g.top = Math.min(g.top, c.posY)
+                g.left = Math.min(g.left, l); g.top = Math.min(g.top, t)
                 g.right = Math.max(g.right, r); g.bottom = Math.max(g.bottom, b)
             }
         }
@@ -169,7 +174,31 @@ AppWindow {
     }
     Connections { target: BridgeReader; function onTicked() { root.updateGroupStates() } }
     FrameAnimation { running: root.groupPlaying; onTriggered: root.updateGroupStates() }
-    onStoreRevisionChanged: updateGroupStates()
+    onStoreRevisionChanged: { updateGroupStates(); syncCopies() }
+
+    // Slots 2-4 of each expanded control (Triggers.usesEach): rows with the
+    // control's own roles, plus slotOfCopy (2-4), copyKey (uid#slot) and
+    // copyOf (its row in the store, for the stacking order). Kept in step by
+    // key, so a copy's view stays put (and keeps animating) while edited.
+    ListModel { id: copyStore }
+    function syncCopies() {
+        const want = []
+        for (let i = 0; i < store.count; ++i) {
+            const c = store.get(i)
+            if (!Triggers.usesEach(c)) continue
+            const plain = JSON.parse(JSON.stringify(c))
+            for (let n = 2; n <= 4; ++n)
+                want.push(Object.assign({}, plain, { slotOfCopy: n, copyKey: c.uid + "#" + n, copyOf: i }))
+        }
+        const keys = want.map(r => r.copyKey)
+        for (let i = copyStore.count - 1; i >= 0; --i)
+            if (!keys.includes(copyStore.get(i).copyKey)) copyStore.remove(i)
+        for (let i = 0; i < want.length; ++i) {
+            if (i < copyStore.count && copyStore.get(i).copyKey === want[i].copyKey) copyStore.set(i, want[i])
+            else copyStore.insert(i, want[i])
+        }
+        while (copyStore.count > want.length) copyStore.remove(copyStore.count - 1)
+    }
 
     Connections {
         target: store
@@ -621,6 +650,7 @@ AppWindow {
     OverlayWindow {
         id: overlay
         model: store
+        copies: copyStore
         groups: root.groups
         groupStates: root.groupStates
         enabled: root.overlayOn
@@ -630,6 +660,7 @@ AppWindow {
         id: previewWindow
         PreviewWindow {
             model: store
+            copies: copyStore
             groups: root.groups
             groupStates: root.groupStates
             selectedId: root.selectedId

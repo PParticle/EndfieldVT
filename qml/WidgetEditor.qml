@@ -94,13 +94,17 @@ PageFrame {
         list.splice(i, 1)
         saveTriggers(list)
     }
+    // 每个小队成员 (Triggers.usesEach): drawn once per squad slot; the
+    // states here are slot 1's.
+    readonly property bool expanded: row !== null && Triggers.usesEach(row)
+    readonly property var reader: expanded ? Triggers.slotReader(1) : BridgeReader
     // Live state, refreshed with every bridge read.
     property var runState: ({})
     readonly property var triggerState: {
         BridgeReader.tick
-        return kind === "bar" ? Triggers.runBar(BridgeReader, value("triggers", ""))
-             : kind === "text" || kind === "buffs" ? Triggers.runText(BridgeReader, value("triggers", ""))
-             : Triggers.run(BridgeReader, value("triggers", ""), runState, Date.now())
+        return kind === "bar" ? Triggers.runBar(reader, value("triggers", ""))
+             : kind === "text" || kind === "buffs" ? Triggers.runText(reader, value("triggers", ""))
+             : Triggers.run(reader, value("triggers", ""), runState, Date.now())
     }
     // Tab names per kind; `tab` indexes into them.
     readonly property var tabNames: kind === "text" || kind === "buffs" ? ["内容", "触发器", "外观"] : kind === "group" ? ["触发器", "整体"]
@@ -110,7 +114,7 @@ PageFrame {
     // A buff list: what it shows now (for the status line and the hint).
     readonly property var buffNow: {
         BridgeReader.tick
-        return kind !== "buffs" ? [] : BridgeReader.buffList({ unit: value("buffUnit", "main"), kind: value("buffKind", "all"),
+        return kind !== "buffs" ? [] : reader.buffList({ unit: value("buffUnit", "main"), kind: value("buffKind", "all"),
             source: value("buffSource", "any"), only: value("buffOnly", ""), exclude: value("buffExclude", ""), max: value("buffMax", 8) })
     }
     function setTextSource(field, v) {
@@ -120,7 +124,7 @@ PageFrame {
     }
     readonly property var textState: {
         BridgeReader.tick
-        return Triggers.composeText(BridgeReader, value("textMode", "static"), value("staticText", ""),
+        return Triggers.composeText(reader, value("textMode", "static"), value("staticText", ""),
                                     value("textSource", ""), false)
     }
     // Another control or tab starts at the top.
@@ -269,6 +273,36 @@ PageFrame {
             height: parent.height
             verticalAlignment: Text.AlignVCenter
             text: check.text
+        }
+    }
+    // 每个小队成员: where the 4 copies go.
+    component ExpandRows: ColumnLayout {
+        Layout.fillWidth: true
+        spacing: Theme.unit
+        FieldRow {
+            label: "展开方向"
+            Choice {
+                role: "expandDir"; fallback: "down"
+                model: [{ label: "向下", value: "down" }, { label: "向右", value: "right" },
+                        { label: "向上", value: "up" }, { label: "向左", value: "left" }]
+            }
+            Label {
+                Layout.leftMargin: Theme.gap
+                Layout.preferredWidth: 8 * Theme.unit
+                text: "间距"
+                color: Theme.textDim
+            }
+            NumberField {
+                from: -1280; to: 1280; unit: "px"
+                value: editor.value("expandGap", 8)
+                onCommitted: v => editor.roleChanged("expandGap", v)
+            }
+        }
+        Hint {
+            Layout.leftMargin: editor.labelW
+            text: "用了「每个小队成员」：画 4 份，1–4 号位各一份，从这个控件的位置往" 
+                  + ({ down: "下", right: "右", up: "上", left: "左" }[editor.value("expandDir", "down")] || "下")
+                  + "排开，共用外观和触发器。某号位没有干员时那一份不显示。这里显示的状态是 1 号位的。"
         }
     }
     // The value number's place, size and color (icons and bars).
@@ -430,6 +464,8 @@ PageFrame {
                     visible: editor.tabbed && editor.tabName === "触发器"
                     width: parent.width
                     spacing: Theme.unit
+
+                    ExpandRows { visible: editor.expanded && editor.kind !== "buffs" }
 
                     // When the control shows at all.
                     RowLayout {
@@ -1168,6 +1204,7 @@ PageFrame {
                             model: Triggers.squadUnits.concat([{ label: "锁定目标", value: "target" }])
                         }
                     }
+                    ExpandRows { visible: editor.expanded }
                     FieldRow {
                         label: "类型"
                         Choice {

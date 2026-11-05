@@ -8,6 +8,7 @@ import QtQuick
 Window {
     id: overlay
     property ListModel model
+    property ListModel copies        // slots 2-4 of expanded controls (Main.copyStore)
     property var groups: ({})
     property var groupStates: ({})
     property alias showInBackground: tracker.showInBackground
@@ -46,6 +47,20 @@ Window {
                 groupStates: overlay.groupStates
                 live: true
                 count: overlay.model ? overlay.model.count : 0
+            }
+        }
+        Repeater {
+            model: overlay.copies
+            delegate: ControlView {
+                required property int slotOfCopy
+                required property int copyOf
+                copySlot: slotOfCopy
+                designScale: canvas.designScale
+                groups: overlay.groups
+                groupStates: overlay.groupStates
+                live: true
+                count: overlay.model ? overlay.model.count : 0
+                z: count - copyOf
             }
         }
     }

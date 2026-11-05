@@ -82,6 +82,24 @@ Item {
     required property string textAlign       // "left" | "center" | "right"
     required property bool textOutline
     required property string outlineColor
+    required property string expandDir       // 每个小队成员: "down" | "up" | "right" | "left"
+    required property real expandGap
+    // A copy of an expanded control (Main.copyStore): squad slot 2-4; 0 = the
+    // control itself, which is slot 1 when expanded.
+    property int copySlot: 0
+    readonly property bool expanded: Triggers.usesEach({ kind: kind, buffUnit: buffUnit, triggers: triggers, textSource: textSource })
+    readonly property int slot: expanded ? Math.max(1, copySlot) : 0
+    // What the triggers read: the bridge, or with "each" this copy's slot.
+    readonly property var reader: slot > 0 ? Triggers.slotReader(slot) : BridgeReader
+    readonly property var copyOffset: slot > 1 ? Triggers.expandOffset({ expandDir: expandDir, expandGap: expandGap,
+                                                                         boxWidth: boxWidth, boxHeight: boxHeight }, slot)
+                                               : ({ x: 0, y: 0 })
+    // An expanded copy whose slot has no operator (a squad of 3) is not drawn.
+    readonly property bool slotEmpty: {
+        BridgeReader.tick
+        return slot > 0 && (BridgeReader.status === "online" || BridgeReader.status === "stale")
+               && !BridgeReader.evaluate({ type: "hp", unit: "slot" + slot, op: "any", value: 0 }).available
+    }
     // A member is scaled around its group's origin; a group's own frame too.
     readonly property var group: groups[kind === "group" ? uid : parentId] || null
     readonly property real groupScale: group ? group.scale : 1
@@ -92,17 +110,17 @@ Item {
 
     readonly property var state: {
         BridgeReader.tick
-        return kind === "icon" ? Triggers.run(BridgeReader, triggers, runState, Date.now())
-             : kind === "bar" ? Triggers.runBar(BridgeReader, triggers)
+        return kind === "icon" ? Triggers.run(reader, triggers, runState, Date.now())
+             : kind === "bar" ? Triggers.runBar(reader, triggers)
              : kind === "text" ? textState()
              : kind === "buffs" ? Object.assign({ effect: "none", progress: 1, startAngle: 0, playing: false, stacks: 0 },
-                                                Triggers.runText(BridgeReader, triggers))
+                                                Triggers.runText(reader, triggers))
              : ({ effect: "none", progress: 1, startAngle: 0, hidden: false, playing: false, stacks: 0 })
     }
     // A text: hidden by its triggers or by a missing value.
     function textState() {
-        const t = Triggers.composeText(BridgeReader, textMode, staticText, textSource, !live)
-        const r = Triggers.runText(BridgeReader, triggers)
+        const t = Triggers.composeText(reader, textMode, staticText, textSource, !live)
+        const r = Triggers.runText(reader, triggers)
         return { effect: "none", progress: 1, startAngle: 0, playing: false, stacks: 0, text: t.text,
                  hidden: t.hidden || r.hidden, style: r.style }
     }
@@ -112,7 +130,7 @@ Item {
     // The group's triggers, for a member: they can hide it, and an icon with
     // no active effect of its own plays the group's.
     readonly property var groupState: follows && parentId !== "" ? groupStates[parentId] || null : null
-    readonly property bool hiddenNow: state.hidden === true || (groupState !== null && groupState.hidden === true)
+    readonly property bool hiddenNow: state.hidden === true || (groupState !== null && groupState.hidden === true) || slotEmpty
     readonly property bool shown: !follows || !hiddenNow || selected
     // How it comes and goes (Triggers.parseMotion): its own, else its group's.
     readonly property var motion: {
@@ -188,8 +206,10 @@ Item {
     readonly property bool isGroup: kind === "group"
     visible: isGroup ? editing && selected && group !== null && group.bw > 0 : shown || presence > 0.001
     opacity: (ghost && selected ? 0.35 : 1) * (group && !isGroup ? group.opacity : 1)
-    x: (isGroup ? (group ? group.bx : 0) : group ? group.ox + (posX - group.ox) * groupScale : posX) * designScale
-    y: (isGroup ? (group ? group.by : 0) : group ? group.oy + (posY - group.oy) * groupScale : posY) * designScale
+    readonly property real atX: posX + copyOffset.x
+    readonly property real atY: posY + copyOffset.y
+    x: (isGroup ? (group ? group.bx : 0) : group ? group.ox + (atX - group.ox) * groupScale : atX) * designScale
+    y: (isGroup ? (group ? group.by : 0) : group ? group.oy + (atY - group.oy) * groupScale : atY) * designScale
     width: (isGroup ? (group ? group.bw : 0) : boxWidth * groupScale) * designScale
     height: (isGroup ? (group ? group.bh : 0) : boxHeight * groupScale) * designScale
     // The sidebar's top row on top; a group's frame under its members (all
@@ -206,7 +226,7 @@ Item {
     ]
     function syncBuffs() {
         if (kind !== "buffs") return
-        const list = live ? BridgeReader.buffList(buffSpec) : buffSamples.slice(0, Math.max(1, buffMax))
+        const list = live ? reader.buffList(buffSpec) : buffSamples.slice(0, Math.max(1, buffMax))
         const keys = list.map(b => b.key)
         for (let i = buffCells.count - 1; i >= 0; --i)
             if (!keys.includes(buffCells.get(i).key)) buffCells.remove(i)

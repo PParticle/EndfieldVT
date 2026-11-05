@@ -105,7 +105,7 @@ QtObject {
     }
 
     readonly property var motions: [
-        { label: "无（直接出现 / 消失）", value: "none" }, { label: "淡入淡出", value: "fade" },
+        { label: "无", value: "none" }, { label: "淡入淡出", value: "fade" },
         { label: "滑动", value: "slide" }, { label: "弹出 / 缩回", value: "pop" }
     ]
     readonly property var slideFroms: [
@@ -124,8 +124,34 @@ QtObject {
     // Which units each type can watch.
     readonly property var squadUnits: [
         { label: "主控干员", value: "main" }, { label: "1 号位", value: "slot1" }, { label: "2 号位", value: "slot2" },
-        { label: "3 号位", value: "slot3" }, { label: "4 号位", value: "slot4" }
+        { label: "3 号位", value: "slot3" }, { label: "4 号位", value: "slot4" },
+        { label: "每个小队成员 ×4", value: "each" }
     ]
+    // ---- per-unit expansion
+    // A control any of whose conditions (or a buff list's unit) is "each"
+    // is drawn four times, one per squad slot, laid out by expandDir /
+    // expandGap: the control itself is slot 1, Main's copies are 2-4. Each
+    // reads its own slot through slotReader(n), which only rewrites "each".
+    function usesEach(c) {
+        return c.kind !== "group" && (c.buffUnit === "each"
+            || /"unit":"each"/.test(c.triggers || "") || (c.kind === "text" && /"unit":"each"/.test(c.textSource || "")))
+    }
+    function slotReader(n) {
+        const slot = "slot" + n
+        const fix = spec => spec && spec.unit === "each" ? Object.assign({}, spec, { unit: slot }) : spec
+        return {
+            slot: n,
+            evaluate: spec => BridgeReader.evaluate(fix(spec)),
+            buffList: spec => BridgeReader.buffList(fix(spec))
+        }
+    }
+    // Copy n's offset from the control, design px.
+    function expandOffset(c, n) {
+        const d = c.expandDir, gap = Number(c.expandGap) || 0
+        const along = (d === "left" || d === "right" ? c.boxWidth : c.boxHeight) + gap
+        const k = (n - 1) * along
+        return { x: d === "right" ? k : d === "left" ? -k : 0, y: d === "down" ? k : d === "up" ? -k : 0 }
+    }
     readonly property var buffUnits: squadUnits.concat([
         { label: "任意小队成员", value: "anySquad" }, { label: "锁定目标", value: "target" },
         { label: "任意敌人", value: "anyEnemy" }
