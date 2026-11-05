@@ -95,6 +95,14 @@ public:
     // Distinct buff ids present now, and skill ids cast recently: for
     // picking ids in the trigger editor.
     Q_INVOKABLE QStringList buffIds() const;
+    // A buff list control: the buffs on one unit (`unit` as in a buff
+    // condition: main, slot1..4, target), filtered by `kind` (all | buff |
+    // debuff), `source` (any | squad | enemy | self), `only` / `exclude`
+    // (buff ids, comma separated). Oldest first (the bridge's key grows as
+    // buffs are added and stays through refreshes), at most `max`. Each:
+    // key, buffId, isDebuff, stacks, timeLeft (-1 = permanent), duration,
+    // progress (time left / duration, 1 when permanent).
+    Q_INVOKABLE QVariantList buffList(const QVariantMap& spec) const;
     Q_INVOKABLE QStringList skillIds() const;
 
 signals:

@@ -47,7 +47,7 @@ PageFrame {
 
     readonly property string kind: value("kind", "")
     readonly property bool tabbed: kind !== ""
-    readonly property var kindNames: ({ icon: "图标", bar: "进度条", text: "文本", group: "组" })
+    readonly property var kindNames: ({ icon: "图标", bar: "进度条", text: "文本", buffs: "Buff 列表", group: "组" })
     readonly property int labelW: 14 * Theme.unit
     property int tab: 0
 
@@ -60,7 +60,7 @@ PageFrame {
         roleChanged("triggers", JSON.stringify({ show: show !== undefined ? show : triggers.show, list: list }))
     }
     function addTrigger(type) {
-        const t = kind === "bar" ? Triggers.makeBarTrigger(type) : kind === "text" ? Triggers.makeTextTrigger(type)
+        const t = kind === "bar" ? Triggers.makeBarTrigger(type) : kind === "text" || kind === "buffs" ? Triggers.makeTextTrigger(type)
                                                                                   : Triggers.makeTrigger(type)
         saveTriggers(triggers.list.concat([t]))
     }
@@ -91,14 +91,20 @@ PageFrame {
     readonly property var triggerState: {
         BridgeReader.tick
         return kind === "bar" ? Triggers.runBar(BridgeReader, value("triggers", ""))
-             : kind === "text" ? Triggers.runText(BridgeReader, value("triggers", ""))
+             : kind === "text" || kind === "buffs" ? Triggers.runText(BridgeReader, value("triggers", ""))
              : Triggers.run(BridgeReader, value("triggers", ""), runState, Date.now())
     }
     // Tab names per kind; `tab` indexes into them.
-    readonly property var tabNames: kind === "text" ? ["内容", "触发器", "外观"] : kind === "group" ? ["触发器", "整体"]
+    readonly property var tabNames: kind === "text" || kind === "buffs" ? ["内容", "触发器", "外观"] : kind === "group" ? ["触发器", "整体"]
                                                                                  : ["触发器", "外观"]
     readonly property string tabName: tabNames[tab] || ""
     readonly property var textSource: Triggers.parseTextSource(value("textSource", ""))
+    // A buff list: what it shows now (for the status line and the hint).
+    readonly property var buffNow: {
+        BridgeReader.tick
+        return kind !== "buffs" ? [] : BridgeReader.buffList({ unit: value("buffUnit", "main"), kind: value("buffKind", "all"),
+            source: value("buffSource", "any"), only: value("buffOnly", ""), exclude: value("buffExclude", ""), max: value("buffMax", 8) })
+    }
     function setTextSource(field, v) {
         const next = Object.assign({}, textSource)
         next[field] = v
@@ -322,11 +328,11 @@ PageFrame {
         // Name: every kind, always on top. Renaming lives only here.
         FieldRow {
             label: "名称"
-            ThemeTextField {
+            EditField {
+                objectName: "nameField"
                 Layout.preferredWidth: 36 * Theme.unit
-                text: editor.value("name", "")
-                onEditingFinished: editor.renameRequested(text)
-                onActiveFocusChanged: if (!activeFocus) text = Qt.binding(() => editor.value("name", ""))
+                value: editor.value("name", "")
+                onCommitted: t => editor.renameRequested(t)
             }
             Item { Layout.fillWidth: true }
             // Loaded, and which trigger drives it.
@@ -342,6 +348,7 @@ PageFrame {
                       ? (editor.triggerState.driving >= 0 ? "● 组触发器 " + (editor.triggerState.driving + 1) + "：" + Triggers.effectLabel(editor.triggerState.effect)
                                                          : "● 组内控件按各自的触发器显示")
                     : editor.kind === "text" ? "● 显示：" + editor.textState.text
+                    : editor.kind === "buffs" ? "● 当前 " + editor.buffNow.length + " 个"
                     : editor.kind === "bar"
                       ? (editor.triggerState.driving >= 0
                          ? "● 触发器 " + (editor.triggerState.driving + 1) + "：进度 " + Math.round(editor.triggerState.progress * 100) + "%"
@@ -405,7 +412,8 @@ PageFrame {
                 width: scroll.availableWidth - Theme.gap  // room for the scroll bar
                 implicitHeight: Math.max(triggerTab.implicitHeight, looksTab.implicitHeight,
                                          barLooksTab.implicitHeight, textContentTab.implicitHeight,
-                                         textLooksTab.implicitHeight, groupTab.implicitHeight)
+                                         textLooksTab.implicitHeight, groupTab.implicitHeight,
+                                         buffContentTab.implicitHeight, buffLooksTab.implicitHeight)
 
                 // ---- 触发器
                 ColumnLayout {
@@ -482,7 +490,7 @@ PageFrame {
                             driving: editor.triggerState.driving === index
                             labelW: editor.labelW
                             forBar: editor.kind === "bar"
-                            forText: editor.kind === "text"
+                            forText: editor.kind === "text" || editor.kind === "buffs"
                             onChanged: t => editor.replaceTrigger(index, t)
                             onRemoveRequested: editor.removeTrigger(index)
                             onMoveRequested: by => editor.moveTrigger(index, by)
@@ -768,6 +776,46 @@ PageFrame {
                         }
                     }
                     FieldRow {
+                        label: "扣血残影"
+                        CheckRow { text: "开启"; role: "barTrail"; fallback: false }
+                        ColorField {
+                            id: trailSwatch
+                            visible: editor.value("barTrail", false)
+                            Layout.leftMargin: Theme.gap
+                            color: editor.value("trailColor", "#ffffff")
+                            onClicked: editor.pickColor("trailColor", trailSwatch)
+                        }
+                        NumberField {
+                            visible: editor.value("barTrail", false)
+                            Layout.leftMargin: Theme.unit
+                            from: 0; to: 100; unit: "%"
+                            value: editor.value("trailOpacity", 70)
+                            onCommitted: v => editor.roleChanged("trailOpacity", v)
+                        }
+                    }
+                    FieldRow {
+                        visible: editor.value("barTrail", false)
+                        label: ""
+                        NumberField {
+                            from: 0; to: 5000; unit: "ms 停留"
+                            implicitWidth: 16 * Theme.unit
+                            value: editor.value("trailHold", 400)
+                            onCommitted: v => editor.roleChanged("trailHold", v)
+                        }
+                        NumberField {
+                            Layout.leftMargin: Theme.unit
+                            from: 0; to: 5000; unit: "ms 缩回"
+                            implicitWidth: 16 * Theme.unit
+                            value: editor.value("trailShrink", 300)
+                            onCommitted: v => editor.roleChanged("trailShrink", v)
+                        }
+                    }
+                    Hint {
+                        visible: editor.value("barTrail", false)
+                        Layout.leftMargin: editor.labelW
+                        text: "进度下降时，掉下去的那段先用这个颜色留着，停留之后再缩回去；连续下降时等最后一次停留完再缩。进度上升时直接跟上。"
+                    }
+                    FieldRow {
                         label: "分段"
                         ThemeComboBox {
                             id: segBox
@@ -902,12 +950,11 @@ PageFrame {
                     FieldRow {
                         visible: textContentTab.mode !== "dynamic"
                         label: "静态文字"
-                        ThemeTextField {
+                        EditField {
                             Layout.fillWidth: true
                             placeholderText: textContentTab.mode === "both" ? "例：某 Buff：" : "要显示的文字"
-                            text: editor.value("staticText", "")
-                            onEditingFinished: editor.roleChanged("staticText", text)
-                            onActiveFocusChanged: if (!activeFocus) text = Qt.binding(() => editor.value("staticText", ""))
+                            value: editor.value("staticText", "")
+                            onCommitted: t => editor.roleChanged("staticText", t)
                         }
                     }
                     Section { visible: textContentTab.mode !== "static"; text: "动态内容" }
@@ -964,12 +1011,12 @@ PageFrame {
                             text: "改显示"
                             color: Theme.textDim
                         }
-                        ThemeTextField {
+                        EditField {
                             visible: !editor.textSource.hideEmpty
                             Layout.preferredWidth: 16 * Theme.unit
                             placeholderText: "留空"
-                            text: editor.textSource.empty
-                            onEditingFinished: editor.setTextSource("empty", text)
+                            value: editor.textSource.empty
+                            onCommitted: t => editor.setTextSource("empty", t)
                         }
                     }
                     Hint {
@@ -978,6 +1025,191 @@ PageFrame {
                         text: "没有数值：未连接、Buff 不在、没有锁定目标等。预览关掉「按触发器显示」时显示为 --，方便摆放。"
                     }
                 }
+                // ---- 内容 (buff list)
+                ColumnLayout {
+                    id: buffContentTab
+                    visible: editor.kind === "buffs" && editor.tabName === "内容"
+                    width: parent.width
+                    spacing: Theme.unit
+
+                    Section { text: "显示谁的 Buff"; Layout.topMargin: 0 }
+                    FieldRow {
+                        label: "单位"
+                        Choice {
+                            role: "buffUnit"; fallback: "main"
+                            model: Triggers.squadUnits.concat([{ label: "锁定目标", value: "target" }])
+                        }
+                    }
+                    FieldRow {
+                        label: "类型"
+                        Choice {
+                            role: "buffKind"; fallback: "all"
+                            model: [{ label: "全部", value: "all" }, { label: "只看增益（Buff）", value: "buff" },
+                                    { label: "只看减益（Debuff）", value: "debuff" }]
+                        }
+                    }
+                    FieldRow {
+                        label: "施加者"
+                        Choice {
+                            role: "buffSource"; fallback: "any"
+                            model: [{ label: "任意", value: "any" }, { label: "我方", value: "squad" },
+                                    { label: "敌方", value: "enemy" }, { label: "持有者自己", value: "self" }]
+                        }
+                    }
+                    FieldRow {
+                        label: "最多显示"
+                        NumberField {
+                            from: 1; to: 32; unit: "个"
+                            value: editor.value("buffMax", 8)
+                            onCommitted: v => editor.roleChanged("buffMax", v)
+                        }
+                    }
+                    Section { text: "筛选（可选）" }
+                    FieldRow {
+                        label: "只显示"
+                        EditField {
+                            id: buffOnlyField
+                            Layout.fillWidth: true
+                            placeholderText: "留空 = 全部；多个 Buff id 用逗号分开"
+                            value: editor.value("buffOnly", "")
+                            onCommitted: t => editor.roleChanged("buffOnly", t.trim())
+                        }
+                    }
+                    FieldRow {
+                        label: "不显示"
+                        EditField {
+                            Layout.fillWidth: true
+                            placeholderText: "这些 Buff id 不显示（例：常驻的被动）"
+                            value: editor.value("buffExclude", "")
+                            onCommitted: t => editor.roleChanged("buffExclude", t.trim())
+                        }
+                    }
+                    Hint {
+                        Layout.leftMargin: editor.labelW
+                        text: "按获得的先后排列：新的排在后面，结束的移走、后面的往前补。"
+                              + (editor.buffNow.length > 0 ? "现在有：" + editor.buffNow.map(b => b.buffId).join("、")
+                                 : BridgeReader.status === "online" || BridgeReader.status === "stale" ? "现在没有符合的 Buff。"
+                                 : "Bridge 未连接。")
+                    }
+                }
+
+                // ---- 外观 (buff list)
+                ColumnLayout {
+                    id: buffLooksTab
+                    visible: editor.kind === "buffs" && editor.tabName === "外观"
+                    width: parent.width
+                    spacing: Theme.unit
+
+                    Section { text: "排列"; Layout.topMargin: 0 }
+                    FieldRow {
+                        label: "方向"
+                        Choice {
+                            role: "buffGrow"; fallback: "right"
+                            model: [{ label: "向右排", value: "right" }, { label: "向左排", value: "left" },
+                                    { label: "向下排", value: "down" }, { label: "向上排", value: "up" }]
+                        }
+                    }
+                    FieldRow {
+                        label: "格子"
+                        NumberField {
+                            from: 12; to: 200; unit: "px"
+                            value: editor.value("buffCell", 40)
+                            onCommitted: v => editor.roleChanged("buffCell", v)
+                        }
+                        Label {
+                            Layout.leftMargin: Theme.gap
+                            Layout.preferredWidth: 8 * Theme.unit
+                            text: "间距"
+                            color: Theme.textDim
+                        }
+                        NumberField {
+                            from: 0; to: 64; unit: "px"
+                            value: editor.value("buffSpacing", 4)
+                            onCommitted: v => editor.roleChanged("buffSpacing", v)
+                        }
+                    }
+                    Hint { Layout.leftMargin: editor.labelW; text: "控件框按「最多显示」个格子自动算；第一个 Buff 在框的起点（向左排在右端，向上排在底端）。" }
+
+                    Section { text: "颜色" }
+                    ColorRow { label: "增益"; colorRole: "borderColor"; opacityRole: "borderOpacity" }
+                    FieldRow {
+                        label: "减益"
+                        ColorField {
+                            id: debuffSwatch
+                            color: editor.value("debuffColor", "#e5484d")
+                            onClicked: editor.pickColor("debuffColor", debuffSwatch)
+                        }
+                    }
+                    FieldRow {
+                        label: "填充"
+                        SliderField { role: "fillOpacity"; fallback: 22 }
+                    }
+                    FieldRow {
+                        label: "边框宽度"
+                        NumberField {
+                            from: 0; to: 16; decimals: 1; unit: "px"
+                            value: editor.value("borderWidth", 3)
+                            onCommitted: v => editor.roleChanged("borderWidth", v)
+                        }
+                    }
+                    Hint { Layout.leftMargin: editor.labelW; text: "格子的边框和填充用增益 / 减益的颜色；已过去的时间用暗色从上往下盖住。" }
+
+                    Section { text: "文字" }
+                    FieldRow {
+                        label: "显示"
+                        CheckRow { text: "剩余时间"; role: "showTimer"; fallback: true }
+                        CheckRow { Layout.leftMargin: Theme.gap; text: "层数"; role: "showStacks"; fallback: true }
+                    }
+                    FieldRow {
+                        label: "Buff 名"
+                        Choice {
+                            role: "buffLabel"; fallback: "none"
+                            model: [{ label: "简写（id 最后两段）", value: "short" }, { label: "完整 id", value: "full" },
+                                    { label: "不显示", value: "none" }]
+                        }
+                    }
+                    FieldRow {
+                        label: "时间字号"
+                        NumberField {
+                            from: 6; to: 200; unit: "px"
+                            value: editor.value("valueSize", 20)
+                            onCommitted: v => editor.roleChanged("valueSize", v)
+                        }
+                        Label {
+                            Layout.leftMargin: Theme.gap
+                            Layout.preferredWidth: 8 * Theme.unit
+                            text: "颜色"
+                            color: Theme.textDim
+                        }
+                        ColorField {
+                            id: buffValueSwatch
+                            color: editor.value("valueColor", "#e6e8eb")
+                            onClicked: editor.pickColor("valueColor", buffValueSwatch)
+                        }
+                    }
+
+                    Section { text: "位置" }
+                    FieldRow {
+                        label: "位置"
+                        NumberField {
+                            from: 0; to: 1280; unit: "X"
+                            value: editor.value("posX", 0)
+                            onCommitted: v => editor.roleChanged("posX", Math.min(v, 1280 - editor.value("boxWidth", 64)))
+                        }
+                        NumberField {
+                            Layout.leftMargin: Theme.unit
+                            from: 0; to: 720; unit: "Y"
+                            value: editor.value("posY", 0)
+                            onCommitted: v => editor.roleChanged("posY", Math.min(v, 720 - editor.value("boxHeight", 64)))
+                        }
+                        Label {
+                            Layout.leftMargin: Theme.gap
+                            text: editor.value("boxWidth", 0) + " × " + editor.value("boxHeight", 0)
+                            color: Theme.textDim
+                        }
+                    }
+                }
+
                 // ---- 外观 (text)
                 ColumnLayout {
                     id: textLooksTab

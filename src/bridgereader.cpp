@@ -545,6 +545,52 @@ QStringList BridgeReader::buffIds() const
     return ids;
 }
 
+QVariantList BridgeReader::buffList(const QVariantMap& spec) const
+{
+    QVariantList out;
+    if (m_status != "online" && m_status != "stale") return out;
+    const QString unit = spec.value("unit", "main").toString();
+    const QString kind = spec.value("kind", "all").toString();
+    const QString source = spec.value("source", "any").toString();
+    const QStringList only = SplitIds(spec.value("only").toString());
+    const QStringList exclude = SplitIds(spec.value("exclude").toString());
+    const int max = std::clamp(spec.value("max", 12).toInt(), 1, 64);
+    const int mainSlot = m_main.value("slot", -1).toInt();
+    const uint32_t lockUid = m_team.value("lockUid").toUInt();
+    const int slot = unit == "main" ? mainSlot : unit.startsWith("slot") ? unit.mid(4).toInt() - 1 : -1;
+
+    QList<QVariantMap> rows;
+    for (const QVariantMap& b : m_buffs->rows()) {
+        const int ownerSlot = b.value("ownerSlot").toInt();
+        const bool ownerOk = unit == "target" ? lockUid && b.value("ownerUid").toUInt() == lockUid
+                                              : slot >= 0 && ownerSlot == slot;
+        if (!ownerOk) continue;
+        const bool debuff = b.value("isDebuff").toInt() != 0;
+        if ((kind == "buff" && debuff) || (kind == "debuff" && !debuff)) continue;
+        const int srcFaction = b.value("sourceFaction").toInt();
+        if (source == "squad" && srcFaction != EFB_FACTION_GOOD) continue;
+        if (source == "enemy" && srcFaction != EFB_FACTION_BAD) continue;
+        if (source == "self" && b.value("sourceSlot").toInt() != ownerSlot) continue;
+        const QString id = b.value("buffId").toString();
+        if (!only.isEmpty() && !only.contains(id)) continue;
+        if (exclude.contains(id)) continue;
+        rows << b;
+    }
+    std::stable_sort(rows.begin(), rows.end(), [](const QVariantMap& a, const QVariantMap& b) {
+        return a.value("key").toUInt() < b.value("key").toUInt();
+    });
+    for (const QVariantMap& b : rows) {
+        if (out.size() >= max) break;
+        const bool infinite = b.value("infinite").toBool();
+        const double duration = b.value("duration").toDouble(), left = b.value("timeLeft").toDouble();
+        out << QVariantMap{{"key", b.value("key")}, {"buffId", b.value("buffId")}, {"isDebuff", b.value("isDebuff").toInt() != 0},
+                           {"stacks", b.value("stacks")}, {"timeLeft", infinite ? -1.0 : left},
+                           {"duration", infinite ? -1.0 : duration},
+                           {"progress", infinite || duration <= 0 ? 1.0 : std::clamp(left / duration, 0.0, 1.0)}};
+    }
+    return out;
+}
+
 QStringList BridgeReader::skillIds() const
 {
     QStringList ids;

@@ -24,7 +24,7 @@ AppWindow {
     // their group directly. The sidebar shows the same order as a tree.
     ListModel { id: store }
 
-    readonly property var kindNames: ({ icon: "图标", bar: "进度条", text: "文本", group: "组" })
+    readonly property var kindNames: ({ icon: "图标", bar: "进度条", text: "文本", buffs: "Buff 列表", group: "组" })
 
     function indexOfId(id) {
         if (id === "") return -1
@@ -33,6 +33,9 @@ AppWindow {
         return -1
     }
     function select(id) {
+        // A field still being edited (or just left focused after Enter)
+        // finishes on the control it belongs to, before the editor switches.
+        if (id !== selectedId) contentItem.forceActiveFocus()
         selectedId = id
         page = ""
     }
@@ -58,9 +61,11 @@ AppWindow {
             // Bars: progress eased over barSmooth ms; barSegments cuts the
             // band into equal parts (-1: one per SP cell); ring end caps.
             barSmooth: 150, barSegments: 0, segmentGap: 2, ringCap: "butt",
+            // 扣血残影: off by default; the lost part in white, held, then shrinking.
+            barTrail: false, trailColor: "#ffffff", trailOpacity: 70, trailHold: 400, trailShrink: 300,
             // The value (time left, SP...) on icons and bars: where (an
             // anchor in the box, then an offset), size and color.
-            valueAnchor: "center", valueSize: 20, valueColor: "#e6e8eb", valueOffsetX: 0, valueOffsetY: 0,
+            valueAnchor: "center", valueSize: kind === "buffs" ? 14 : 20, valueColor: "#e6e8eb", valueOffsetX: 0, valueOffsetY: 0,
             // Texts: what they say (qml/Triggers.qml, composeText) and how.
             textMode: "static", staticText: "文本", textSource: JSON.stringify(Triggers.makeTextSource("buff")),
             textColor: "#ffffff", textOpacity: 100, fontSize: 24, fontBold: true, textAlign: "center",
@@ -68,6 +73,10 @@ AppWindow {
             // Groups: scale (around the group's origin, posX / posY) and
             // opacity, in %, applied to every member.
             groupScale: 100, groupOpacity: 100,
+            // Buff lists: whose buffs, which, and how the cells line up
+            // (BridgeReader.buffList; the box fits buffMax cells).
+            buffUnit: "main", buffKind: "all", buffSource: "any", buffOnly: "", buffExclude: "", buffMax: 8,
+            buffCell: 40, buffSpacing: 4, buffGrow: "right", buffLabel: "none", debuffColor: "#e5484d",
             // No triggers: drawn as styled (qml/Triggers.qml).
             triggers: JSON.stringify({ show: "always", list: [] })
         }
@@ -84,6 +93,7 @@ AppWindow {
         })
         store.insert(0, control)
         if (kind === "bar") fitBarBox(0)
+        if (kind === "buffs") fitBuffBox(0)
         select(uid)
         if (kind !== "group") showPreview()
     }
@@ -277,11 +287,26 @@ AppWindow {
         if (role === "groupScale") return setGroupScale(index, value)
         store.setProperty(index, role, value)
         const c = store.get(index)
+        // The box is always the cells' (a typed size would not match them).
+        if (c.kind === "buffs" && buffSizeRoles.includes(role)) fitBuffBox(index)
         if (c.kind !== "bar") return
         // The inner radius stays inside the outer one.
         if ((role === "ringOuter" || role === "ringInner") && c.ringInner >= c.ringOuter)
             store.setProperty(index, "ringInner", Math.max(0, c.ringOuter - 1))
         if (barSizeRoles.includes(role)) fitBarBox(index)
+    }
+    // A buff list's box holds buffMax cells in a line, from its top-left.
+    readonly property var buffSizeRoles: ["buffMax", "buffCell", "buffSpacing", "buffGrow", "boxWidth", "boxHeight"]
+    function fitBuffBox(index) {
+        const c = store.get(index)
+        const along = c.buffMax * c.buffCell + (c.buffMax - 1) * c.buffSpacing
+        const across = c.buffCell
+        const across_ = c.buffGrow === "down" || c.buffGrow === "up"
+        const w = across_ ? across : along, h = across_ ? along : across
+        store.setProperty(index, "boxWidth", w)
+        store.setProperty(index, "boxHeight", h)
+        store.setProperty(index, "posX", Math.max(0, Math.min(1280 - w, c.posX)))
+        store.setProperty(index, "posY", Math.max(0, Math.min(720 - h, c.posY)))
     }
 
     // A bar's box is its shape's rotated bounds plus the border, kept
@@ -431,7 +456,10 @@ AppWindow {
             const data = JSON.parse(text)
             if (!data || !Array.isArray(data.controls)) throw new Error("不是 EndfieldVT 的配置（没有 controls）")
             for (const c of data.controls) store.append(migrate(c))
-            for (let i = 0; i < store.count; ++i) if (store.get(i).kind === "bar") fitBarBox(i)
+            for (let i = 0; i < store.count; ++i) {
+                if (store.get(i).kind === "bar") fitBarBox(i)
+                if (store.get(i).kind === "buffs") fitBuffBox(i)
+            }
             nextNumber = data.nextNumber || store.count + 1
             overlayOn = data.overlay !== false
             loaded = true

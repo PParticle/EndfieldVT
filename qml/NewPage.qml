@@ -27,6 +27,7 @@ PageFrame {
                     { kind: "icon", title: "图标", desc: "自定义图形，有可选的显示效果" },
                     { kind: "bar", title: "进度条", desc: "剩余时间或资源量" },
                     { kind: "text", title: "文本", desc: "显示数值或自定义文字，可为动态内容" },
+                    { kind: "buffs", title: "Buff 列表", desc: "某个单位身上所有的 Buff，按获得先后排成一排" },
                     { kind: "group", title: "组", desc: "新建一个空组，在左侧把控件拖进去" },
                 ]
                 KindRow {
@@ -66,7 +67,7 @@ PageFrame {
                 Loader {
                     anchors.centerIn: parent
                     sourceComponent: card.kind === "icon" ? iconArt : card.kind === "bar" ? barArt
-                                   : card.kind === "text" ? textArt : groupArt
+                                   : card.kind === "text" ? textArt : card.kind === "buffs" ? buffsArt : groupArt
                 }
             }
             Rectangle {
@@ -149,6 +150,24 @@ PageFrame {
                 color: Theme.accent
                 font.pixelSize: 2 * Theme.title
                 font.weight: Font.DemiBold
+            }
+        }
+        // Four buff cells, the first two with time running out.
+        Component {
+            id: buffsArt
+            Row {
+                spacing: Theme.unit / 2
+                Repeater {
+                    model: [0.7, 0.35, 1, 1]
+                    Rectangle {
+                        required property real modelData
+                        required property int index
+                        width: 3 * Theme.unit; height: width
+                        color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.2)
+                        border.color: index === 2 ? Theme.danger : Theme.accent
+                        Rectangle { x: 1; y: 1; width: parent.width - 2; height: (parent.height - 2) * (1 - parent.modelData); color: "#000000"; opacity: 0.45 }
+                    }
+                }
             }
         }
         // Three 24 px squares, 8 apart.

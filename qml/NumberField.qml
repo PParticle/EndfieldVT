@@ -3,6 +3,8 @@ import QtQuick.Controls.Basic
 
 // A typed number with an optional unit after it. Commits on Enter or when
 // focus leaves; out-of-range input is clamped, anything else is reverted.
+// Until the user types, the text follows `value` even while focused (the
+// field keeps focus after Enter while the editor switches controls).
 ThemeTextField {
     id: field
     property real value: 0
@@ -11,9 +13,15 @@ ThemeTextField {
     property int decimals: 0
     property string unit
     signal committed(real value)
+    property bool edited: false
 
     function format(v) { return decimals > 0 ? Number(v).toFixed(decimals) : String(Math.round(v)) }
     function commit() {
+        if (!edited) {
+            text = format(value)
+            return
+        }
+        edited = false
         const parsed = Number(text.trim())
         if (text.trim() === "" || isNaN(parsed)) {
             text = format(value)
@@ -31,7 +39,8 @@ ThemeTextField {
     inputMethodHints: Qt.ImhFormattedNumbersOnly
     validator: RegularExpressionValidator { regularExpression: /-?\d*(\.\d*)?/ }
     text: format(value)
-    onValueChanged: if (!activeFocus) text = format(value)
+    onTextEdited: edited = true
+    onValueChanged: if (!edited) text = format(value)
     onEditingFinished: commit()
     onActiveFocusChanged: if (!activeFocus) commit()
 

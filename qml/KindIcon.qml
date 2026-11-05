@@ -29,6 +29,15 @@ Item {
         Rectangle { x: 3; y: 3; width: 10; height: 2; color: glyph.color }
         Rectangle { x: 7; y: 3; width: 2; height: 10; color: glyph.color }
     }
+    // buff list: three small squares in a row
+    Item {
+        anchors.fill: parent
+        visible: glyph.kind === "buffs"
+        Repeater {
+            model: 3
+            Rectangle { required property int index; x: 1 + index * 5; y: 6; width: 4; height: 4; color: index === 0 ? glyph.color : "transparent"; border.color: glyph.color }
+        }
+    }
     // group: a folder
     Item {
         anchors.fill: parent

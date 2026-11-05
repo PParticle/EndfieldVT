@@ -51,11 +51,27 @@ Item {
     required property real barSegments       // equal parts, 0 = none, -1 = one per SP cell
     required property real segmentGap        // design px between parts
     required property string ringCap         // "butt" | "round"
+    required property bool barTrail          // 扣血残影: a drop leaves the lost part for a while
+    required property string trailColor
+    required property real trailOpacity
+    required property real trailHold         // ms the lost part stays
+    required property real trailShrink       // ms it then takes to shrink away
     required property string valueAnchor     // "center" | "top" | "bottom" | "left" | "right" | corners ("topLeft"...)
     required property real valueSize         // design px
     required property string valueColor
     required property real valueOffsetX
     required property real valueOffsetY
+    required property string buffUnit        // a buff list (BridgeReader.buffList)
+    required property string buffKind
+    required property string buffSource
+    required property string buffOnly
+    required property string buffExclude
+    required property real buffMax
+    required property real buffCell          // design px, square
+    required property real buffSpacing
+    required property string buffGrow        // "right" | "left" | "down" | "up": where new ones go
+    required property string buffLabel       // "short" | "full" | "none": the buff id in the cell
+    required property string debuffColor
     required property string textMode        // "static" | "dynamic" | "both" (qml/Triggers.qml, composeText)
     required property string staticText
     required property string textSource
@@ -72,13 +88,15 @@ Item {
     readonly property real drawScale: designScale * groupScale
     // What the triggers draw, and whether they hide it (qml/Triggers.qml).
     property var runState: ({})
-    readonly property bool usesTriggers: kind === "icon" || kind === "bar" || kind === "text"
+    readonly property bool usesTriggers: kind !== "group"
 
     readonly property var state: {
         BridgeReader.tick
         return kind === "icon" ? Triggers.run(BridgeReader, triggers, runState, Date.now())
              : kind === "bar" ? Triggers.runBar(BridgeReader, triggers)
              : kind === "text" ? textState()
+             : kind === "buffs" ? Object.assign({ effect: "none", progress: 1, startAngle: 0, playing: false, stacks: 0 },
+                                                Triggers.runText(BridgeReader, triggers))
              : ({ effect: "none", progress: 1, startAngle: 0, hidden: false, playing: false, stacks: 0 })
     }
     // A text: hidden by its triggers or by a missing value.
@@ -277,6 +295,41 @@ Item {
             enabled: object.barSmooth > 0
             NumberAnimation { duration: object.barSmooth; easing.type: Easing.OutQuad }
         }
+        // 扣血残影: `trail` stays where the progress was when it drops, holds
+        // for trailHold ms, then shrinks to it; on a rise it is drawn only
+        // where it is above the (eased) progress, so it never leads it.
+        // `trailing`: a drop is being shown; otherwise the trail just rides on
+        // the progress (a rise eases up with it, never ahead).
+        property real trail: target
+        property bool trailing: false
+        onTargetChanged: {
+            if (object.barTrail && target < progress - 1e-6) {
+                if (!trailing) { trail = progress; trailing = true }
+                if (!trailAnim.running) trailHold.restart()
+            } else if (target >= trail) {
+                trailAnim.stop()
+                trailHold.stop()
+                trailing = false
+            }
+        }
+
+        Timer {
+            id: trailHold
+            interval: Math.max(0, object.trailHold)
+            onTriggered: { trailAnim.to = barCanvas.target; trailAnim.restart() }
+        }
+        NumberAnimation {
+            id: trailAnim
+            target: barCanvas; property: "trail"
+            duration: Math.max(1, object.trailShrink)
+            easing.type: Easing.InOutQuad
+            // A drop during the shrink: hold again, then shrink to the new value.
+            onFinished: {
+                if (barCanvas.trail > barCanvas.target + 1e-6) trailHold.restart()
+                else barCanvas.trailing = false
+            }
+        }
+        onTrailChanged: requestPaint()
         // Parts: a fixed count, or one per SP cell (from the bridge).
         readonly property int parts: {
             if (object.barSegments >= 0) return Math.round(object.barSegments)
@@ -287,8 +340,11 @@ Item {
                             object.barLength, object.barThickness, object.barRotation,
                             object.progressColor, object.progressOpacity, object.borderColor, object.borderWidth,
                             object.borderOpacity, object.fillColor, object.fillOpacity, object.drawScale,
-                            parts, object.segmentGap, object.ringCap]
-        onProgressChanged: requestPaint()
+                            parts, object.segmentGap, object.ringCap, object.barTrail, object.trailColor, object.trailOpacity]
+        onProgressChanged: {
+            if (!trailing) trail = progress
+            requestPaint()
+        }
         onLookChanged: requestPaint()
         onWidthChanged: requestPaint()
         onHeightChanged: requestPaint()
@@ -314,6 +370,19 @@ Item {
                 g.globalAlpha = object.fillOpacity / 100
                 g.fillStyle = object.fillColor
                 g.fillRect(x0, y0, w, h)
+                // The lost part, between the progress and the trail.
+                const tp = object.barTrail ? Math.max(p, Math.min(1, trail)) : p
+                if (tp > p) {
+                    g.globalAlpha = object.trailOpacity / 100
+                    g.fillStyle = object.trailColor
+                    if (horizontal) {
+                        const tw = w * tp
+                        g.fillRect(dir === "leftToRight" ? x0 : x0 + w - tw, y0, tw, h)
+                    } else {
+                        const th = h * tp
+                        g.fillRect(x0, dir === "topToBottom" ? y0 : y0 + h - th, w, th)
+                    }
+                }
                 if (p > 0) {
                     g.globalAlpha = object.progressOpacity / 100
                     g.fillStyle = object.progressColor
@@ -390,8 +459,13 @@ Item {
             }
             if (inThick <= 0 || inSpan <= 0) return
             ring(inStart, inSpan, inThick, object.fillColor, object.fillOpacity / 100)
+            const clockwise = object.barDirection !== "rightToLeft"
+            const tp = object.barTrail ? Math.max(p, Math.min(1, trail)) : p
+            if (tp > p) {
+                const length = inSpan * tp
+                ring(clockwise ? inStart : inStart + inSpan - length, length, inThick, object.trailColor, object.trailOpacity / 100)
+            }
             if (p > 0) {
-                const clockwise = object.barDirection !== "rightToLeft"
                 const length = inSpan * p
                 ring(clockwise ? inStart : inStart + inSpan - length, length, inThick, object.progressColor, object.progressOpacity / 100)
             }
@@ -411,6 +485,108 @@ Item {
                     g.stroke()
                 }
                 g.globalCompositeOperation = "source-over"
+            }
+        }
+    }
+    // A buff list: one cell per buff on the unit, oldest first; a new buff
+    // goes at the end, a finished one leaves and the rest slide up. The
+    // cells live in their own model, matched by the bridge's buff key, so a
+    // cell keeps its place (and slides) instead of being rebuilt every read.
+    // Arranging (live off): three sample cells.
+    ListModel { id: buffCells }
+    readonly property var buffSpec: ({ unit: buffUnit, kind: buffKind, source: buffSource, only: buffOnly,
+                                       exclude: buffExclude, max: buffMax })
+    readonly property var buffSamples: [
+        { key: -1, buffId: "buff_sample_atk_up", isDebuff: false, stacks: 3, timeLeft: 8.2, duration: 12, progress: 0.68 },
+        { key: -2, buffId: "buff_sample_shield", isDebuff: false, stacks: 1, timeLeft: -1, duration: -1, progress: 1 },
+        { key: -3, buffId: "debuff_sample_burn", isDebuff: true, stacks: 1, timeLeft: 2.4, duration: 6, progress: 0.4 }
+    ]
+    function syncBuffs() {
+        if (kind !== "buffs") return
+        const list = live ? BridgeReader.buffList(buffSpec) : buffSamples.slice(0, Math.max(1, buffMax))
+        const keys = list.map(b => b.key)
+        for (let i = buffCells.count - 1; i >= 0; --i)
+            if (!keys.includes(buffCells.get(i).key)) buffCells.remove(i)
+        for (let i = 0; i < list.length; ++i) {
+            const b = list[i]
+            const row = { key: b.key, buffId: b.buffId, isDebuff: b.isDebuff, stacks: b.stacks, timeLeft: b.timeLeft, progress: b.progress }
+            if (i < buffCells.count && buffCells.get(i).key === b.key) buffCells.set(i, row)
+            else buffCells.insert(i, row)
+        }
+        while (buffCells.count > list.length) buffCells.remove(buffCells.count - 1)
+    }
+    Connections { target: BridgeReader; enabled: object.kind === "buffs"; function onTicked() { object.syncBuffs() } }
+    onBuffSpecChanged: syncBuffs()
+    onLiveChanged: syncBuffs()
+    Component.onCompleted: syncBuffs()
+    Item {
+        visible: object.kind === "buffs"
+        anchors.fill: parent
+        Repeater {
+            model: buffCells
+            Item {
+                id: cell
+                required property int index
+                required property string buffId
+                required property bool isDebuff
+                required property int stacks
+                required property real timeLeft
+                required property real progress
+                readonly property real size: object.buffCell * object.drawScale
+                readonly property real step: (object.buffCell + object.buffSpacing) * object.drawScale
+                readonly property string g: object.buffGrow
+                width: size; height: size
+                x: g === "right" ? index * step : g === "left" ? parent.width - size - index * step : 0
+                y: g === "down" ? index * step : g === "up" ? parent.height - size - index * step : 0
+                Behavior on x { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                Behavior on y { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                readonly property color tint: isDebuff ? object.debuffColor : object.borderColor
+                Rectangle {
+                    anchors.fill: parent
+                    color: Qt.rgba(cell.tint.r, cell.tint.g, cell.tint.b, object.fillOpacity / 100)
+                    border.width: object.borderWidth * object.drawScale
+                    border.color: Qt.rgba(cell.tint.r, cell.tint.g, cell.tint.b, object.borderOpacity / 100)
+                }
+                // Time passed: a dark curtain from the top, down to what is left.
+                Rectangle {
+                    x: object.borderWidth * object.drawScale
+                    y: x
+                    width: parent.width - 2 * x
+                    height: Math.max(0, (parent.height - 2 * x) * (1 - shown))
+                    color: "#000000"
+                    opacity: 0.45
+                    property real shown: cell.progress
+                    Behavior on shown { NumberAnimation { duration: 120 } }
+                }
+                Label {
+                    visible: object.buffLabel !== "none"
+                    anchors { left: parent.left; right: parent.right; top: parent.top; margins: 2 * object.drawScale }
+                    text: object.buffLabel === "full" ? cell.buffId
+                          : cell.buffId.replace(/^(buff|debuff)_/, "").split("_").slice(-2).join("_")
+                    elide: Text.ElideRight
+                    horizontalAlignment: Text.AlignHCenter
+                    color: Theme.text
+                    style: Text.Outline; styleColor: Theme.frame
+                    font.pixelSize: Math.max(6, 9 * object.drawScale)
+                }
+                Label {
+                    visible: object.showTimer && cell.timeLeft >= 0
+                    anchors.centerIn: parent
+                    text: cell.timeLeft >= 10 ? Math.round(cell.timeLeft) : cell.timeLeft.toFixed(1)
+                    color: object.valueColor
+                    style: Text.Outline; styleColor: Theme.frame
+                    font.pixelSize: Math.max(6, object.valueSize * object.drawScale)
+                    font.weight: Font.DemiBold
+                }
+                Label {
+                    visible: object.showStacks && cell.stacks > 1
+                    anchors { right: parent.right; bottom: parent.bottom; margins: 2 * object.drawScale }
+                    text: cell.stacks
+                    color: Theme.text
+                    style: Text.Outline; styleColor: Theme.frame
+                    font.pixelSize: Math.max(6, 11 * object.drawScale)
+                    font.weight: Font.DemiBold
+                }
             }
         }
     }

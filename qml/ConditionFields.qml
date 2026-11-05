@@ -84,12 +84,12 @@ ColumnLayout {
     Row_ {
         label: "Buff id"
         visible: card.type === "buff"
-        ThemeTextField {
+        EditField {
             id: buffIds
             Layout.fillWidth: true
             placeholderText: "多个 id 用逗号分开"
-            text: card.field("buffIds", "")
-            onEditingFinished: card.set("buffIds", text.trim())
+            value: card.field("buffIds", "")
+            onCommitted: t => card.set("buffIds", t.trim())
         }
         FlatButton {
             Layout.leftMargin: Theme.unit
@@ -239,11 +239,11 @@ ColumnLayout {
     Row_ {
         label: "技能 id"
         visible: card.type === "skillCast"
-        ThemeTextField {
+        EditField {
             Layout.fillWidth: true
             placeholderText: "留空 = 任意技能；多个用逗号分开"
-            text: card.field("skillId", "")
-            onEditingFinished: card.set("skillId", text.trim())
+            value: card.field("skillId", "")
+            onCommitted: t => card.set("skillId", t.trim())
         }
         FlatButton {
             Layout.leftMargin: Theme.unit

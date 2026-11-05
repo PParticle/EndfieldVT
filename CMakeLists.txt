@@ -28,6 +28,7 @@ qt_add_qml_module(EndfieldVT
         qml/StatusBar.qml
         qml/KindIcon.qml
         qml/ThemeTextField.qml
+        qml/EditField.qml
         qml/NumberField.qml
         qml/ThemeComboBox.qml
         qml/ThemeSlider.qml
