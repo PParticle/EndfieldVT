@@ -118,6 +118,61 @@ ColumnLayout {
         }
     }
 
+    // buff (present) and combo (cooling): optional tests on stacks / time left
+    component OpValue: RowLayout {
+        id: ov
+        property string label
+        property string opField
+        property string valueField
+        property real fallback: 0
+        property string unit
+        property int decimals: 0
+        Layout.fillWidth: true
+        spacing: 0
+        Label {
+            Layout.preferredWidth: card.labelW
+            Layout.preferredHeight: Theme.rowH
+            verticalAlignment: Text.AlignVCenter
+            text: ov.label
+            color: Theme.textDim
+        }
+        Choice {
+            Layout.preferredWidth: 15 * Theme.unit
+            field: ov.opField; fallback: "any"
+            model: Triggers.compareOps
+        }
+        NumberField {
+            visible: card.field(ov.opField, "any") !== "any"
+            Layout.leftMargin: Theme.unit
+            from: 0; to: 100000; decimals: ov.decimals; unit: ov.unit
+            value: card.field(ov.valueField, ov.fallback)
+            onCommitted: v => card.set(ov.valueField, v)
+        }
+        Item { Layout.fillWidth: true }
+    }
+    OpValue {
+        visible: card.type === "buff" && !card.valueOnly && card.field("show", "present") === "present"
+        label: "层数"; opField: "stacksOp"; valueField: "stacksValue"; fallback: 1; unit: "层"
+    }
+    OpValue {
+        visible: card.type === "buff" && !card.valueOnly && card.field("show", "present") === "present"
+        label: "剩余时间"; opField: "leftOp"; valueField: "leftValue"; fallback: 3; unit: "s"; decimals: 1
+    }
+    OpValue {
+        visible: card.type === "combo" && !card.valueOnly && card.field("show", "cooling") === "cooling"
+        label: "剩余冷却"; opField: "leftOp"; valueField: "leftValue"; fallback: 2; unit: "s"; decimals: 1
+    }
+    Label {
+        visible: card.type === "buff" && !card.valueOnly && card.field("show", "present") === "present"
+                 && (card.field("stacksOp", "any") !== "any" || card.field("leftOp", "any") !== "any")
+        Layout.leftMargin: card.labelW
+        Layout.fillWidth: true
+        wrapMode: Text.WordWrap
+        text: "Buff 在、而且层数 / 剩余时间也满足时才算满足。例：剩余时间 ≤ 3 s + 条件样式变红 = 快结束时变红。永久 Buff 的剩余时间按无穷大算。"
+        color: Theme.textFaint
+        font.pixelSize: Theme.caption
+    }
+
     // atb
     Row_ {
         label: "计量"

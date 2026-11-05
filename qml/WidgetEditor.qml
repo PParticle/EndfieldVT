@@ -401,6 +401,7 @@ PageFrame {
 
         ScrollView {
             id: scroll
+            objectName: "editorScroll"
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.topMargin: Theme.gap
@@ -491,6 +492,7 @@ PageFrame {
                             labelW: editor.labelW
                             forBar: editor.kind === "bar"
                             forText: editor.kind === "text" || editor.kind === "buffs"
+                            kind: editor.kind
                             onChanged: t => editor.replaceTrigger(index, t)
                             onRemoveRequested: editor.removeTrigger(index)
                             onMoveRequested: by => editor.moveTrigger(index, by)
@@ -505,7 +507,7 @@ PageFrame {
                         color: Theme.textFaint
                         font.pixelSize: Theme.caption
                         visible: editor.triggers.list.length > 0 && editor.kind === "bar"
-                        text: "按顺序检查：第一个满足的触发器给出进度（标黄的那个）。没有满足的就显示为空。例：连携技（勾「反向」）= 冷却转好时填满；Buff = 剩余时间。"
+                        text: "按顺序检查：第一个满足、且「给出进度」的触发器给出进度（标黄的那个）。没有满足的就显示为空。满足时样式（变色、发光、闪烁…）则每个满足的触发器都会套上。例：连携技（勾「反向」）= 冷却转好时填满；Buff = 剩余时间。"
                     }
                     Label {
                         Layout.fillWidth: true

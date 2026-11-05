@@ -5,7 +5,8 @@ import QtQuick.Layouts
 // One trigger: when (one or more conditions, all or any), what (an icon's
 // effect, a bar's progress), and how an effect runs: following the first
 // condition's own progress (a buff's time left, a cooldown), or playing
-// once over a set time when the trigger starts.
+// once over a set time when the trigger starts. Then a style while it
+// holds (Triggers.styleOf): recolor, opacity, glow, a loop animation.
 Rectangle {
     id: card
     property var trigger: ({})
@@ -18,6 +19,7 @@ Rectangle {
     property bool forBar: false
     // A text's trigger only decides when it shows.
     property bool forText: false
+    property string kind: ""       // the control's kind, for the hints
     signal changed(var trigger)
     signal removeRequested()
     signal moveRequested(int by)
@@ -73,6 +75,39 @@ Rectangle {
         Connections { target: card; function onTriggerChanged() { choice.select(card.field(choice.field, choice.fallback)) } }
         onActivated: card.set(field, currentValue)
     }
+    // A check box bound to one boolean field.
+    component Toggle: AbstractButton {
+        id: tg
+        property string field
+        property bool fallback: false
+        property alias label: tgLabel.text
+        readonly property bool on: card.field(field, fallback) === true
+        implicitHeight: Theme.rowH
+        implicitWidth: tgBox.width + Theme.unit + tgLabel.implicitWidth
+        hoverEnabled: true
+        onClicked: card.set(field, !on)
+        Rectangle {
+            id: tgBox
+            anchors.verticalCenter: parent.verticalCenter
+            width: 2 * Theme.unit; height: width
+            color: tg.on ? Theme.accent : Theme.surface
+            border.color: tg.on ? Theme.accent : tg.hovered ? Theme.text : Theme.lineStrong
+            Label {
+                anchors.centerIn: parent
+                visible: tg.on
+                text: "✓"
+                color: Theme.frame
+                font.pixelSize: Theme.caption
+                font.weight: Font.Bold
+            }
+        }
+        Label {
+            id: tgLabel
+            x: tgBox.width + Theme.unit
+            height: parent.height
+            verticalAlignment: Text.AlignVCenter
+        }
+    }
     component Section_: Label {
         Layout.topMargin: Theme.unit / 2
         color: Theme.textFaint
@@ -106,7 +141,9 @@ Rectangle {
             Label {
                 Layout.fillWidth: true
                 text: card.conditions.map(c => Triggers.label(c.type)).join(card.field("mode", "all") === "any" ? " 或 " : " + ")
-                      + (card.forBar ? "  →  进度" : card.forText ? "  →  显示" : "  →  " + Triggers.effectLabel(card.effect))
+                      + (card.forBar ? (card.field("drives", true) ? "  →  进度" : "") : card.forText ? "  →  显示"
+                         : card.effect !== "none" || !Triggers.hasStyle(card.trigger) ? "  →  " + Triggers.effectLabel(card.effect) : "")
+                      + (Triggers.hasStyle(card.trigger) ? "  →  样式" : "")
                 font.weight: Font.DemiBold
                 elide: Text.ElideRight
             }
@@ -250,8 +287,13 @@ Rectangle {
         // A bar shows the whole 0..max, or one part of it: three bars at
         // 0-100, 100-200, 200-300 SP make one cell each.
         Row_ {
-            label: "进度范围"
+            label: "给出进度"
             visible: card.forBar
+            Toggle { field: "drives"; fallback: true; label: "用这个触发器的数值填充进度条" }
+        }
+        Row_ {
+            label: "进度范围"
+            visible: card.forBar && card.field("drives", true)
             Choice {
                 field: "range"; fallback: "full"
                 model: [{ label: "0 到上限", value: "full" }, { label: "自定范围", value: "part" }]
@@ -272,7 +314,7 @@ Rectangle {
             }
         }
         Label {
-            visible: card.forBar && card.field("range", "full") === "part"
+            visible: card.forBar && card.field("drives", true) && card.field("range", "full") === "part"
             Layout.fillWidth: true
             Layout.leftMargin: card.labelW
             wrapMode: Text.WordWrap
@@ -284,7 +326,7 @@ Rectangle {
         }
         Row_ {
             label: "反向"
-            visible: card.forBar || (card.effect !== "none" && card.timing === "follow")
+            visible: (card.forBar && card.field("drives", true)) || (card.effect !== "none" && card.timing === "follow")
             AbstractButton {
                 id: rev
                 readonly property bool on: card.field("reverse", false)
@@ -336,7 +378,7 @@ Rectangle {
         Label {
             Layout.fillWidth: true
             Layout.leftMargin: card.labelW
-            visible: !card.forText && (card.forBar || card.effect !== "none")
+            visible: !card.forText && ((card.forBar && card.field("drives", true)) || card.effect !== "none")
             wrapMode: Text.WordWrap
             color: Theme.textFaint
             font.pixelSize: Theme.caption
@@ -348,6 +390,85 @@ Rectangle {
                   + card.field("playSeconds", 0.4) + " 秒内从 0 播放到完整，之后"
                   + (card.field("after", "keep") === "hide" ? "图标消失，直到触发器再次满足。" : "保持完整显示。")
                 : "进度取自条件：Buff 和技能释放是剩余时间比例，连携技是剩余冷却比例，其余是当前值 / 上限。"
+        }
+
+        // Style while the trigger holds.
+        Rectangle { Layout.fillWidth: true; Layout.topMargin: Theme.unit / 2; implicitHeight: 1; color: Theme.line }
+        Section_ { text: "满足时样式" }
+        Row_ {
+            label: "改颜色"
+            Toggle {
+                field: "tint"
+                label: card.kind === "icon" ? "边框和填充" : card.kind === "bar" ? "进度颜色"
+                     : card.kind === "text" ? "文字颜色" : card.kind === "buffs" ? "格子颜色" : "成员的颜色"
+            }
+            ColorField {
+                id: tintSwatch
+                visible: card.field("tint", false) === true
+                Layout.leftMargin: Theme.gap
+                color: card.field("tintColor", "#e5484d")
+                onClicked: card.colorRequested("tintColor", tintSwatch, card.field("tintColor", "#e5484d"))
+            }
+        }
+        Row_ {
+            label: "不透明度"
+            NumberField {
+                from: 0; to: 100; unit: "%"
+                value: card.field("alpha", 100)
+                onCommitted: v => card.set("alpha", v)
+            }
+            Label {
+                Layout.leftMargin: Theme.unit
+                text: "100% 为不变"
+                color: Theme.textFaint
+                font.pixelSize: Theme.caption
+            }
+        }
+        Row_ {
+            label: "发光"
+            Choice { field: "glow"; fallback: "none"; model: Triggers.glows }
+            ColorField {
+                id: glowSwatch
+                visible: card.field("glow", "none") !== "none"
+                Layout.leftMargin: Theme.gap
+                color: card.field("glowColor", "#ffd166")
+                onClicked: card.colorRequested("glowColor", glowSwatch, card.field("glowColor", "#ffd166"))
+            }
+            NumberField {
+                visible: card.field("glow", "none") !== "none"
+                Layout.leftMargin: Theme.unit
+                from: 1; to: 40; unit: "px"
+                value: card.field("glowSize", 8)
+                onCommitted: v => card.set("glowSize", v)
+            }
+        }
+        Row_ {
+            label: "循环动画"
+            Choice { field: "loop"; fallback: "none"; model: Triggers.loops }
+            NumberField {
+                visible: card.field("loop", "none") !== "none"
+                Layout.leftMargin: Theme.unit
+                from: 0.1; to: 10; decimals: 1; unit: "s"
+                value: card.field("loopSeconds", 1)
+                onCommitted: v => card.set("loopSeconds", v)
+            }
+            Label {
+                visible: card.field("loop", "none") !== "none"
+                Layout.leftMargin: Theme.unit
+                text: "一个周期"
+                color: Theme.textFaint
+                font.pixelSize: Theme.caption
+            }
+        }
+        Label {
+            Layout.fillWidth: true
+            Layout.leftMargin: card.labelW
+            wrapMode: Text.WordWrap
+            color: Theme.textFaint
+            font.pixelSize: Theme.caption
+            text: "只在这个触发器满足时生效；多个满足时，后面的覆盖前面的。"
+                  + (card.kind === "group" ? "组的样式作用到每个成员上，成员自己的样式优先。"
+                     : card.forBar ? "只改样式、不想影响进度时，把「给出进度」关掉。" : "")
         }
     }
 }

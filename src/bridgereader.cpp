@@ -669,6 +669,14 @@ QVariantMap BridgeReader::evaluate(const QVariantMap& spec) const
         r["value"] = infinite ? 0.0 : left;
         r["max"] = infinite ? 0.0 : duration;
         r["text"] = infinite ? QString() : QString::number(left, 'f', 1);
+        // Optional extra tests on the buff found: its stacks and time left
+        // ("any" = no test). A permanent buff never counts as running out.
+        const QString stacksOp = spec.value("stacksOp", "any").toString();
+        const QString leftOp = spec.value("leftOp", "any").toString();
+        bool ok = Compare(best.value("stacks").toDouble(), stacksOp, spec.value("stacksValue", 1).toDouble());
+        if (leftOp != "any")
+            ok = ok && (infinite ? leftOp.startsWith(">") : Compare(left, leftOp, spec.value("leftValue", 3).toDouble()));
+        r["active"] = ok;
         return r;
     }
 
@@ -759,6 +767,10 @@ QVariantMap BridgeReader::evaluate(const QVariantMap& spec) const
         r["value"] = left;
         r["max"] = cd;
         r["text"] = ready ? QString() : QString::number(left, 'f', 1);
+        // Cooling: optionally only while the time left passes a test (≤ 2 s = almost ready).
+        const QString leftOp = spec.value("leftOp", "any").toString();
+        if (wantCooling && !ready && leftOp != "any")
+            r["active"] = Compare(left, leftOp, spec.value("leftValue", 2).toDouble());
         return r;
     }
 

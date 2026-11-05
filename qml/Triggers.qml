@@ -24,8 +24,15 @@ import QtQuick
 //   "follow": the condition's own progress (buff time left, cooldown,
 //   charge); "play": on becoming active, animate 0 -> 1 over playSeconds,
 //   then keep the end state or hide (until the trigger starts again).
-//   Bars: the first active trigger gives the progress. Texts: triggers
-//   only decide when the text shows.
+//   Bars: the first active trigger that gives progress (`drives`, default
+//   on) gives it. Texts and buff lists: triggers only decide when they show.
+//   Style, any kind, while a trigger is active (all optional; later active
+//   triggers win field by field, a member's own over its group's):
+//     tint + tintColor   recolor: icon border and fill, a bar's progress,
+//                        a text, buff cells
+//     alpha              opacity 0-100 (100 = unchanged)
+//     glow: "none" | "soft" | "flow" | "pixel", glowColor, glowSize
+//     loop: "none" | "pulse" | "breathe" | "blink" | "shake" | "spin", loopSeconds
 QtObject {
     readonly property var types: [
         { value: "buff", label: "Buff / Debuff", desc: "某个单位身上有（或没有）指定的 Buff" },
@@ -53,6 +60,44 @@ QtObject {
     function effectLabel(value) {
         for (const e of effects) if (e.value === value) return e.label
         return value
+    }
+
+    readonly property var glows: [
+        { label: "无", value: "none" }, { label: "外发光", value: "soft" },
+        { label: "流光（沿边框转圈）", value: "flow" }, { label: "像素边框", value: "pixel" }
+    ]
+    readonly property var loops: [
+        { label: "无", value: "none" }, { label: "脉冲（放大缩小）", value: "pulse" },
+        { label: "呼吸（渐隐渐显）", value: "breathe" }, { label: "闪烁", value: "blink" },
+        { label: "抖动", value: "shake" }, { label: "旋转", value: "spin" }
+    ]
+    // What the active triggers' styles add up to: { tint, alpha, glow,
+    // glowColor, glowSize, loop, loopSeconds }, only the fields some active
+    // trigger sets.
+    function styleOf(list, results) {
+        const s = {}
+        for (let i = 0; i < list.length; ++i) {
+            if (!results[i] || !results[i].active) continue
+            const t = list[i]
+            if (t.tint) s.tint = t.tintColor || "#e5484d"
+            if (t.alpha !== undefined && Number(t.alpha) < 100) s.alpha = Math.max(0, Number(t.alpha))
+            if (t.glow && t.glow !== "none") {
+                s.glow = t.glow
+                s.glowColor = t.glowColor || "#ffd166"
+                s.glowSize = t.glowSize !== undefined ? Math.max(1, Number(t.glowSize)) : 8
+            }
+            if (t.loop && t.loop !== "none") {
+                s.loop = t.loop
+                s.loopSeconds = Math.max(0.1, Number(t.loopSeconds) || 1)
+            }
+        }
+        return s
+    }
+    // A member's style: its group's, with its own fields on top.
+    function mergeStyle(group, own) { return Object.assign({}, group || {}, own || {}) }
+    function hasStyle(t) {
+        return !!t.tint || (t.alpha !== undefined && Number(t.alpha) < 100)
+            || (t.glow && t.glow !== "none") || (t.loop && t.loop !== "none")
     }
 
     // Which units each type can watch.
@@ -158,14 +203,17 @@ QtObject {
         const d = parseTriggers(text)
         const results = d.list.map(t => evaluateTrigger(reader, t))
         const never = d.show === "never"
-        if (d.list.length === 0) return { progress: 1, text: "", stacks: 0, hidden: never, results: results, driving: -1 }
+        const style = styleOf(d.list, results)
+        if (d.list.length === 0) return { progress: 1, text: "", stacks: 0, hidden: never, results: results, driving: -1, style: style }
+        const anyActive = results.some(r => r.active)
         for (let i = 0; i < d.list.length; ++i) {
-            if (!results[i].active) continue
+            if (!results[i].active || d.list[i].drives === false) continue
             const p = Math.max(0, Math.min(1, barProgress(d.list[i], results[i])))
             return { progress: d.list[i].reverse ? 1 - p : p, text: results[i].text || "",
-                     stacks: results[i].stacks || 0, hidden: never, results: results, driving: i }
+                     stacks: results[i].stacks || 0, hidden: never, results: results, driving: i, style: style }
         }
-        return { progress: 0, text: "", stacks: 0, hidden: d.show === "active", results: results, driving: -1 }
+        return { progress: 0, text: "", stacks: 0, hidden: never || (d.show === "active" && !anyActive),
+                 results: results, driving: -1, style: style }
     }
     // A text: shown unless show "never", or "active" and no trigger is active.
     function runText(reader, text) {
@@ -174,7 +222,7 @@ QtObject {
         let driving = -1
         for (let i = 0; i < results.length && driving < 0; ++i) if (results[i].active) driving = i
         return { hidden: d.show === "never" || (d.show === "active" && d.list.length > 0 && driving < 0),
-                 results: results, driving: driving }
+                 results: results, driving: driving, style: styleOf(d.list, results) }
     }
 
     // ---- text
@@ -262,7 +310,8 @@ QtObject {
         const out = { effect: "none", progress: 1, startAngle: 0, spread: "overlay", spreadColor: "#ffffff",
                       spreadOpacity: 70,
                       hidden: d.show === "never" || (d.show === "active" && triggers.length > 0 && !anyActive),
-                      playing: false, stacks: 0, text: "", results: results, driving: drive === null ? -1 : drive }
+                      playing: false, stacks: 0, text: "", results: results, driving: drive === null ? -1 : drive,
+                      style: styleOf(triggers, results) }
         if (drive === null) return out
         const t = triggers[drive], r = results[drive]
         out.effect = t.effect
