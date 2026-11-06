@@ -1,8 +1,9 @@
 name: Windows CI and Release
 
-# Every push: build EndfieldVT against a static Qt into one EndfieldVT.exe.
+# Every push: build EndfieldVT against a static Qt into one EndfieldVT.exe,
+# zipped with the standard config (config/default.json) next to it.
 # A v* tag: also check the tag against the exe's ProductVersion
-# (src/version.rc) and publish a GitHub Release with the exe.
+# (src/version.rc) and publish a GitHub Release with the zip.
 #
 # The static Qt (qtbase, qtshadertools, qtdeclarative; MSVC runtime linked in)
 # is built from source once, then restored from the cache. Bump QT_CACHE_REV
@@ -127,12 +128,22 @@ jobs:
           findstr /i /r "Qt6 MSVCP VCRUNTIME api-ms-win-crt" build\dependents.txt && (echo [ERROR] not a standalone exe & exit /b 1)
           exit /b 0
 
-      - name: Show size and version
+      - name: Package
         shell: pwsh
         working-directory: EndfieldVT
         run: |
+          $ErrorActionPreference = 'Stop'
           $exe = Get-Item 'bin\EndfieldVT.exe'
-          "EndfieldVT.exe {0:N1} MB, version {1}" -f ($exe.Length / 1MB), $exe.VersionInfo.ProductVersion
+          $version = $exe.VersionInfo.ProductVersion
+          # The standard config must load: valid JSON with a controls list.
+          $config = Get-Content 'config\default.json' -Raw -Encoding utf8 | ConvertFrom-Json
+          if ($config.controls -isnot [array]) { throw 'config/default.json has no controls list' }
+          New-Item -ItemType Directory package | Out-Null
+          Copy-Item $exe.FullName, 'config\default.json' package\
+          $zip = "EndfieldVT-v$version-windows-x64.zip"
+          Compress-Archive -Path package\* -DestinationPath $zip
+          "EndfieldVT.exe {0:N1} MB, version {1}; {2} {3:N1} MB ({4} controls in default.json)" -f ($exe.Length / 1MB), $version, $zip, ((Get-Item $zip).Length / 1MB), $config.controls.Count
+          "ZIP=$zip" >> $env:GITHUB_ENV
 
       - name: Verify release version
         if: startsWith(github.ref, 'refs/tags/v')
@@ -149,7 +160,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: EndfieldVT-windows-x64
-          path: EndfieldVT/bin/EndfieldVT.exe
+          path: EndfieldVT/${{ env.ZIP }}
           if-no-files-found: error
 
   publish-release:
@@ -169,6 +180,6 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: release-assets/EndfieldVT.exe
+          files: release-assets/*.zip
           generate_release_notes: true
           fail_on_unmatched_files: true

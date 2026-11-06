@@ -1,93 +1,83 @@
 # EndfieldVT
 
-[![Windows CI and Release](https://github.com/PParticle/EndfieldVT/actions/workflows/release.yml/badge.svg)](https://github.com/PParticle/EndfieldVT/actions/workflows/release.yml)
+《Arknights: Endfield》自定义信息覆盖层
 
-EndfieldVT 是《明日方舟：终末地》的自定义界面工具。你可以做出图标、进度条、文字和 Buff 列表，让它们按照游戏里的 Buff、技力、连携技冷却、HP、失衡等数据显示和变化，再叠加到游戏画面上。
+## 下载与运行
 
-EndfieldVT 是一个独立程序，不修改游戏，也不往游戏里注入任何东西。游戏数据来自 [EndfieldDataBridge](https://github.com/PParticle/EndfieldDataBridge) 插件写出的只读共享内存。
+需要前置插件 [EndfieldDataBridge](https://github.com/PParticle/EndfieldDataBridge)。
 
-## 功能
+1. 从 [Releases](https://github.com/PParticle/EndfieldVT/releases) 下载。
+2. 启动游戏并加载 EndfieldDataBridge，运行 EndfieldVT。
 
-- **可视化编辑器**：所有设置都在界面里完成，不用写代码；在 1280×720 的预览画布上直接拖动摆放控件，实时看到效果。
-- **四种控件**：
-  - 图标：方形、圆形、三角、六边形，可旋转，带冷却转圈和扩散动画。
-  - 进度条：长条或圆环，支持分段、圆头、平滑过渡和扣血残影。
-  - 文本：静态文字、实时数值，或带占位符的模板，例如 `{技力} / {上限}`、`剩余 {剩余:mm:ss}`。
-  - Buff 列表：某个单位身上的全部 Buff，新获得的排在后面，结束的自动补位。
-- **触发器**：按 Buff / Debuff（是否存在、层数、剩余时间）、技力、终结技、连携技冷却、HP、失衡、锁定目标、战斗状态、技能释放来决定控件何时显示、显示什么。多个条件可以取「全部满足」或「任一满足」。
-- **满足时样式**：条件满足时变色、改透明度、发光（外发光、流光、像素边框），或播放循环动画（脉冲、呼吸、闪烁、抖动、旋转）。例如 Buff 剩 3 秒时变红，连携技就绪时发光。
-- **出现与消失动画**：淡入淡出、滑动、弹出缩回。
-- **队伍成员 ×4**：一个控件自动展开成 4 份，分别对应 1–4 号位，共用外观和触发器。
-- **组**：整体移动、缩放、调整透明度；组的触发器作用于所有成员。
-- **多份配置**：程序目录里的每个配置文件（`.json`）都能在标题栏里切换，所有修改自动保存。
-- **调试页**：查看 EndfieldDataBridge 当前提供的全部数据和事件，方便确认触发器为什么亮或不亮。
+## 控件与触发器
 
-## 下载
+| 控件      | 用途与设置                                                                       |
+| --------- | -------------------------------------------------------------------------------- |
+| 图标      | 方形、圆形、三角形或六边形；支持顺逆时针填充、中心扩散，以及剩余时间和层数显示。 |
+| 进度条    | 矩形条或圆环；支持自定义数值范围、分段、平滑过渡和消耗残影。                     |
+| 文本      | 静态文字、动态数值或多数据源模板；可设置字号、描边、对齐和无数据时的处理方式。   |
+| Buff 列表 | 展示指定目标的 Buff/Debuff；可按类型、来源和 ID 黑白名单过滤，并自动排列、补位。 |
 
-在 [Releases](https://github.com/PParticle/EndfieldVT/releases) 下载最新的 `EndfieldVT.exe`。它是单个文件，自带 Qt 和运行库，不用安装。
+### 条件、显示与样式
 
-需要：
+触发条件包括 Buff/Debuff、技力、终结技、连携技、生命值、失衡、锁定目标、战斗状态和技能释放，也可以设为「始终满足」。监控目标随条件类型选择，例如主控干员、指定队伍位置或锁定目标。
 
-- Windows 10 / 11 x64。
-- 游戏里装好 [EndfieldDataBridge](https://github.com/PParticle/EndfieldDataBridge) 和它的前置插件管理器 [Applepie Manager](https://github.com/zonemodAE/ApplepieManager)，安装方法见各自的说明。
+- **显示模式**决定控件始终显示、仅在触发器满足时显示，还是始终隐藏。
+- **每个触发器**可以包含多个条件，按「全部满足 (AND)」或「任一满足 (OR)」判断。进度与数值取自该触发器的第一个条件。
+- **多个触发器**按顺序执行：图标采用首个满足且设有效果的触发器；进度条采用首个满足且启用「给出进度」的触发器。满足条件的样式会叠加，同一属性以后面的设置为准。
 
-## 快速开始
+例如，监控 Buff 剩余时间时，可以在条件中选择「Buff/Debuff」，填写 Buff ID，再设置「存在」且「剩余时间 ≤ 3 s」，在「满足时样式」中设置变色或发光。Buff ID 可通过「从当前 Buff 选择」获取，也可在「调试」页查找。
 
-1. 把 `EndfieldVT.exe` 放进一个单独的文件夹。配置文件 `default.json` 会保存在同一个文件夹里。
-2. 启动游戏，再启动 EndfieldVT。启动顺序不限，Bridge 连上后右下角的状态栏会显示「Bridge 已连接」。
-3. 点击标题栏的「新建」，选一种控件。
-4. 在「触发器」页设置条件。例如：类型选「连携技」，状态选「冷却中」，效果选「顺时针填充」。
-5. 在「外观」页调整形状、颜色、大小。点击「预览与编辑」打开 1280×720 的预览窗口，拖动摆放位置。
-6. 标题栏的「游戏内显示」默认开启，控件会叠加在游戏画面上；再点一次可以关掉。
+样式支持颜色、透明度、发光和循环动画；控件还可设置淡入淡出、滑动、缩放等出现与消失动画。文本和 Buff 列表的内容单独设置，触发器控制其显示与样式。
 
-游戏内的覆盖层是一个透明窗口，跟随游戏窗口的位置和大小，鼠标点击会穿透到游戏。
+### 动态文本
+
+在文本的「内容」页选择「模板 (占位符)」，先配置动态数据源，再填写模板：
+
+| 数据源      | 模板示例                        |
+| ----------- | ------------------------------- |
+| 技力        | `{技力} / {上限}`               |
+| 生命值      | `HP {数值} / {上限} ({百分比})` |
+| Buff/Debuff | `剩余 {剩余:mm:ss} · {层数} 层` |
+
+占位符默认读取数据源 1；添加更多数据源后，用 `{数值2}`、`{上限2}` 等引用对应编号。`{技力}`、`{HP}` 等是数值字段的别名，实际读取哪类数据仍由所选数据源决定。缺少数据时，可以隐藏整个文本或显示回退文本。
+
+### 组与队伍展开
+
+- **组**：新建组后，将左侧列表中的控件拖入组内，即可整体移动、缩放和调整透明度。组触发器可控制整组显示，成员仍保留各自的触发器和样式。
+- **队伍成员 ×4**：在支持的监控目标中选择此项，一个控件会按队伍 1–4 号位展开为四份，共享外观和触发逻辑；可设置展开方向与间距，空位不显示。
+
+## 配置与分享
+
+配置保存在 `EndfieldVT.exe` 所在目录，默认使用 `default.json`。标题栏的「配置」菜单可以切换配置、新建空配置、复制当前配置或打开配置文件夹。`EndfieldVT.ini` 记录上次使用的配置。
+
+分享时复制对应的 `.json` 文件即可。将收到的配置放入程序目录，再打开「配置」菜单选择它；菜单会识别包含 `controls` 数组的配置文件。备份或更新程序时保留这些文件；手动修改当前配置前先退出程序，避免被自动保存覆盖。
 
 ## 从源码构建
 
-环境：
+需要 Windows x64、Visual Studio 2022 C++ 生成工具（MSVC x64 与 Windows SDK）、Qt 的 MSVC 2022 64 位套件（含 Qt Quick）、CMake 3.21+ 和 Ninja。CMake 要求 Qt 6.8+；当前构建脚本和 CI 使用 Qt 6.12.0。
 
-- Windows x64，Visual Studio 2022 C++ 生成工具（x64 MSVC 和 Windows SDK）。
-- [Qt 6.12](https://www.qt.io/download-qt-installer) MSVC 2022 64 位版，包含 Qt Quick。
-- [EndfieldDataBridge](https://github.com/PParticle/EndfieldDataBridge) 的源码，放在本仓库旁边：
+构建时需要 EndfieldDataBridge 的公开头文件，默认目录结构为：
 
 ```text
-src/
+workspace/
 ├── EndfieldDataBridge/
+│   └── include/
 └── EndfieldVT/
 ```
 
-在 EndfieldVT 目录下运行：
+在 Shell 中运行：
 
 ```powershell
 build.bat
 ```
 
-脚本会用 `vswhere` 找到生成工具并初始化 x64 MSVC 环境，再用 `windeployqt` 把 Qt 的运行文件复制到 `bin\`。Qt 默认从 `D:\QT\6.12.0\msvc2022_64` 查找，装在别处时先设置 `QT_DIR`：
+脚本自动查找 MSVC，使用 CMake/Ninja 构建，并通过 `windeployqt` 将 Qt 依赖部署到 `bin\`。此方式生成动态链接版，运行时需保留 `bin\` 中的依赖文件；脚本不部署 MSVC 运行库。
 
-```powershell
-set QT_DIR=C:\Qt\6.12.0\msvc2022_64
-build.bat
-```
+手动配置 CMake 时，可用 `-DEFB_INCLUDE_DIR=路径` 指定 Bridge 的 `include` 目录。发布版的静态 Qt 和单文件打包流程见 [GitHub Actions](.github/workflows/release.yml)。
 
-这样编出来的 `bin\` 是动态链接版，适合开发调试。Releases 里的单文件版由 [GitHub Actions](.github/workflows/release.yml) 构建：先从源码编译一份静态 Qt（只含 qtbase、qtshadertools、qtdeclarative），再把 EndfieldVT 静态链接成一个 exe。版本号写在 `src/version.rc`，发布标签 `v*` 必须和它一致。
+## Acknowledgements
 
-## 问题反馈
+This project is licensed under the [AGPL-3.0](LICENSE) license.
 
-遇到问题、发现 bug，或者有功能建议，请到 [Issues](https://github.com/PParticle/EndfieldVT/issues) 提出。反馈时最好附上：
-
-- EndfieldVT 和 EndfieldDataBridge 的版本号（都在文件属性的「详细信息」里：`EndfieldVT.exe`、`EndfieldDataBridge.dll`）。
-- 出问题的控件设置。可以把配置文件 `.json` 一起附上。
-- 当时调试页里显示的相关数据。
-
-开发进度和待办事项见 [docs/TODO.md](docs/TODO.md)。
-
-## 许可
-
-本项目使用 [AGPL-3.0](LICENSE) 许可证。发布版静态链接了 [Qt](https://www.qt.io/) 的开源版（LGPL-3.0）；完整源码就在本仓库，可以按上面的步骤自行编译。
-
-## 致谢
-
-- [WeakAuras](https://github.com/WeakAuras/WeakAuras2)：《魔兽世界》的界面插件。EndfieldVT 的控件、触发器、条件样式和动画这一套设计思路都参考了它。
-- [EndfieldDataBridge](https://github.com/PParticle/EndfieldDataBridge)：提供全部游戏数据。
-- [Applepie Manager](https://github.com/zonemodAE/ApplepieManager)：EndfieldDataBridge 所依赖的插件管理器。
-- [Qt](https://www.qt.io/)：界面框架。
+Special thanks to [WeakAuras](https://github.com/WeakAuras/WeakAuras2) for its design inspiration, [EndfieldDataBridge](https://github.com/PParticle/EndfieldDataBridge) for providing game data, [Applepie Manager](https://github.com/zonemodAE/ApplepieManager) for plugin loading support,，and [Qt](https://www.qt.io/) for the UI framework.
