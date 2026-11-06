@@ -40,11 +40,11 @@ import QtQuick
 QtObject {
     readonly property var types: [
         { value: "buff", label: "Buff/Debuff", desc: "目标身上存在（或不存在）指定 Buff/Debuff" },
-        { value: "atb", label: "战技技力", desc: "战技技力值或可用格数" },
+        { value: "atb", label: "技力", desc: "技力值或可用格数" },
         { value: "ultimate", label: "终结技", desc: "终结技充能状态或已就绪" },
         { value: "combo", label: "连携技", desc: "连携技冷却状态或已就绪" },
         { value: "hp", label: "生命值(HP)", desc: "目标的生命值（百分比判定）" },
-        { value: "poise", label: "韧性(失衡)", desc: "目标失衡状态或失衡值" },
+        { value: "poise", label: "失衡", desc: "目标失衡状态或失衡值" },
         { value: "lock", label: "锁定目标", desc: "是否存在已锁定的目标" },
         { value: "combat", label: "战斗状态", desc: "小队处于战斗状态中" },
         { value: "skillCast", label: "技能释放", desc: "释放指定技能后的一段时间内" },
