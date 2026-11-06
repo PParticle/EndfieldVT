@@ -1,6 +1,6 @@
 # EndfieldVT
 
-《Arknights: Endfield》非官方自定义信息覆盖层
+《Arknights: Endfield》自定义信息覆盖层
 
 ## 用户协议与免责声明
 
