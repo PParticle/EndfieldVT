@@ -1,5 +1,9 @@
 #include <winver.h>
 
+// The exe's icon; Qt also uses IDI_ICON1 for its windows and the taskbar.
+// Drawn from EndfieldVT.png (256 px) at 16-256 px.
+IDI_ICON1 ICON "EndfieldVT.ico"
+
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION     0,21,0,0
 PRODUCTVERSION  0,21,0,0
