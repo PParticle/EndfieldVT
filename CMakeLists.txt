@@ -5,9 +5,21 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Quick)
+# A static Qt (the release build, .github/workflows/release.yml) makes one
+# exe: Qt's CMake links in the QML modules and the platform plugin the app
+# uses. That Qt is built with the static MSVC runtime, so every target here
+# (the exe and the ones qt_add_qml_module adds) must use it too.
+get_target_property(_efvt_qt_type Qt6::Core TYPE)
+if(_efvt_qt_type STREQUAL "STATIC_LIBRARY" AND MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 qt_standard_project_setup(REQUIRES 6.8)
 
 qt_add_executable(EndfieldVT WIN32 src/main.cpp src/bridgereader.cpp src/gamewindow.cpp)
+if(WIN32)
+    # Version shown in the file's properties (src/version.rc; a release tag must match).
+    target_sources(EndfieldVT PRIVATE src/version.rc)
+endif()
 
 set_source_files_properties(qml/Theme.qml qml/Triggers.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 qt_add_qml_module(EndfieldVT
@@ -57,6 +69,7 @@ endif()
 if(MSVC)
     target_compile_options(EndfieldVT PRIVATE /W4 /utf-8 /permissive-)
 endif()
+
 set_target_properties(EndfieldVT PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
 )

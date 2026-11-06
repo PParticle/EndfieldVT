@@ -1,0 +1,174 @@
+name: Windows CI and Release
+
+# Every push: build EndfieldVT against a static Qt into one EndfieldVT.exe.
+# A v* tag: also check the tag against the exe's ProductVersion
+# (src/version.rc) and publish a GitHub Release with the exe.
+#
+# The static Qt (qtbase, qtshadertools, qtdeclarative; MSVC runtime linked in)
+# is built from source once, then restored from the cache. Bump QT_CACHE_REV
+# after changing QT_VERSION or the configure options, so it builds again.
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  QT_VERSION: 6.12.0
+  QT_CACHE_REV: 1
+  QT_PREFIX: C:\qt-static
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout EndfieldVT
+        uses: actions/checkout@v7
+        with:
+          path: EndfieldVT
+          persist-credentials: false
+
+      - name: Checkout EndfieldDataBridge (public headers)
+        uses: actions/checkout@v7
+        with:
+          repository: PParticle/EndfieldDataBridge
+          path: EndfieldDataBridge
+          sparse-checkout: include
+          persist-credentials: false
+
+      - name: Restore static Qt
+        id: qt-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.QT_PREFIX }}
+          key: qt-static-${{ env.QT_VERSION }}-msvc2022-x64-r${{ env.QT_CACHE_REV }}
+
+      - name: Download Qt sources
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $v = $env:QT_VERSION
+          $mm = ($v -split '\.')[0..1] -join '.'
+          $base = "https://download.qt.io/official_releases/qt/$mm/$v/submodules"
+          New-Item -ItemType Directory C:\qt-src | Out-Null
+          Set-Location C:\qt-src
+          Invoke-WebRequest "$base/md5sums.txt" -OutFile md5sums.txt
+          foreach ($m in 'qtbase', 'qtshadertools', 'qtdeclarative') {
+            $zip = "$m-everywhere-src-$v.zip"
+            Invoke-WebRequest "$base/$zip" -OutFile $zip
+            # Checked against Qt's own list before use.
+            $line = Select-String -Path md5sums.txt -SimpleMatch $zip | Select-Object -First 1
+            if (-not $line) { throw "$zip is not in md5sums.txt" }
+            $want = ($line.Line -split '\s+')[0]
+            $got = (Get-FileHash $zip -Algorithm MD5).Hash.ToLower()
+            if ($want -ne $got) { throw "$zip md5 $got, expected $want" }
+            7z x $zip -y | Out-Null
+            Rename-Item "$m-everywhere-src-$v" $m
+          }
+
+      - name: Build static Qt
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do call "%%i\VC\Auxiliary\Build\vcvars64.bat"
+          if errorlevel 1 exit /b 1
+          rem qtbase: only what the app uses. Then the two modules on top of it.
+          mkdir C:\qt-build\qtbase
+          cd /d C:\qt-build\qtbase
+          call C:\qt-src\qtbase\configure.bat -prefix %QT_PREFIX% -static -static-runtime -release -optimize-size ^
+            -nomake examples -nomake tests -no-openssl -no-dbus -no-feature-sql -no-feature-printsupport
+          if errorlevel 1 exit /b 1
+          cmake --build . --parallel
+          if errorlevel 1 exit /b 1
+          cmake --install .
+          if errorlevel 1 exit /b 1
+          for %%m in (qtshadertools qtdeclarative) do (
+            mkdir C:\qt-build\%%m
+            cd /d C:\qt-build\%%m
+            call %QT_PREFIX%\bin\qt-configure-module.bat C:\qt-src\%%m
+            if errorlevel 1 exit /b 1
+            cmake --build . --parallel
+            if errorlevel 1 exit /b 1
+            cmake --install .
+            if errorlevel 1 exit /b 1
+          )
+
+      # Saved right away: a later failure must not throw away a 2-hour build.
+      - name: Save static Qt
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.QT_PREFIX }}
+          key: ${{ steps.qt-cache.outputs.cache-primary-key }}
+
+      - name: Build EndfieldVT
+        shell: cmd
+        working-directory: EndfieldVT
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do call "%%i\VC\Auxiliary\Build\vcvars64.bat"
+          if errorlevel 1 exit /b 1
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=%QT_PREFIX% -DEFB_INCLUDE_DIR=%GITHUB_WORKSPACE%\EndfieldDataBridge\include
+          if errorlevel 1 exit /b 1
+          cmake --build build
+          if errorlevel 1 exit /b 1
+          rem One exe, nothing next to it: no Qt or MSVC runtime DLLs.
+          dumpbin /nologo /dependents bin\EndfieldVT.exe > build\dependents.txt
+          type build\dependents.txt
+          findstr /i /r "Qt6 MSVCP VCRUNTIME api-ms-win-crt" build\dependents.txt && (echo [ERROR] not a standalone exe & exit /b 1)
+          exit /b 0
+
+      - name: Show size and version
+        shell: pwsh
+        working-directory: EndfieldVT
+        run: |
+          $exe = Get-Item 'bin\EndfieldVT.exe'
+          "EndfieldVT.exe {0:N1} MB, version {1}" -f ($exe.Length / 1MB), $exe.VersionInfo.ProductVersion
+
+      - name: Verify release version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        working-directory: EndfieldVT
+        run: |
+          $tagVersion = $env:GITHUB_REF_NAME -replace '^v', ''
+          $productVersion = (Get-Item 'bin\EndfieldVT.exe').VersionInfo.ProductVersion
+          if ($productVersion -ne $tagVersion) {
+            throw "Git tag version $tagVersion does not match exe ProductVersion $productVersion"
+          }
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v7
+        with:
+          name: EndfieldVT-windows-x64
+          path: EndfieldVT/bin/EndfieldVT.exe
+          if-no-files-found: error
+
+  publish-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download build output
+        uses: actions/download-artifact@v8
+        with:
+          name: EndfieldVT-windows-x64
+          path: release-assets
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: release-assets/EndfieldVT.exe
+          generate_release_notes: true
+          fail_on_unmatched_files: true
