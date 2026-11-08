@@ -200,9 +200,13 @@ AppWindow {
         while (copyStore.count > want.length) copyStore.remove(copyStore.count - 1)
     }
 
+    // Edits come in bursts (moving a group writes every member): one recount
+    // after the burst instead of one per write. Rows added, removed or moved
+    // still count at once, so selectedIndex never points at the wrong row.
+    function bumpRevision() { storeRevision++ }
     Connections {
         target: store
-        function onDataChanged() { root.storeRevision++ }
+        function onDataChanged() { Qt.callLater(root.bumpRevision) }
         function onRowsInserted() { root.storeRevision++ }
         function onRowsRemoved() { root.storeRevision++ }
         function onRowsMoved() { root.storeRevision++ }

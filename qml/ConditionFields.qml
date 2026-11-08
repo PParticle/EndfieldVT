@@ -308,6 +308,25 @@ ColumnLayout {
             onClicked: idMenu.popupFor(BridgeReader.skillIds(), "skillId")
         }
     }
+    // bar full
+    Row_ {
+        label: "持续时间"
+        visible: card.type === "barFull"
+        NumberField {
+            from: 0.05; to: 60; decimals: 2; unit: "s"
+            value: card.field("hold", 0.5)
+            onCommitted: v => card.set("hold", v)
+        }
+    }
+    Label {
+        visible: card.type === "barFull"
+        Layout.leftMargin: card.labelW
+        Layout.fillWidth: true
+        wrapMode: Text.WordWrap
+        text: "按本进度条其他触发器给出的进度判定：达到 100%，或冷却、Buff 等倒计时走完时视为填满。回落到 97% 以下后才会再次触发。"
+        color: Theme.textFaint
+        font.pixelSize: Theme.caption
+    }
     Row_ {
         label: "显示时长"
         visible: card.type === "skillCast"

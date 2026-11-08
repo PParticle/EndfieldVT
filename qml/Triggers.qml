@@ -37,6 +37,10 @@ import QtQuick
 //     alpha              opacity 0-100 (100 = unchanged)
 //     glow: "none" | "soft" | "flow" | "pixel", glowColor, glowSize
 //     loop: "none" | "pulse" | "breathe" | "blink" | "shake" | "spin", loopSeconds
+//     once: "none" | "flash" | "bounce" | "sweep" | "ring", onceColor, onceSeconds:
+//                        plays once as the trigger starts to hold (ControlView)
+//   Bars also have the condition 进度条已满 ({ type: "barFull", hold }): met
+//   for `hold` seconds from when the bar fills (runBar).
 QtObject {
     readonly property var types: [
         { value: "buff", label: "Buff/Debuff", desc: "目标身上存在（或不存在）指定 Buff/Debuff" },
@@ -50,8 +54,12 @@ QtObject {
         { value: "skillCast", label: "技能释放", desc: "释放指定技能后的一段时间内" },
         { value: "always", label: "始终满足", desc: "忽略游戏数据，始终判定为满足" },
     ]
+    // Bars: also 进度条已满, judged on the bar itself (runBar), not the game data.
+    readonly property var barTypes: types.slice(0, -1).concat([
+        { value: "barFull", label: "进度条已满", desc: "进度条刚填满时满足，持续设定的时长" }
+    ], types.slice(-1))
     function label(type) {
-        for (const t of types) if (t.value === type) return t.label
+        for (const t of barTypes) if (t.value === type) return t.label
         return type
     }
 
@@ -69,6 +77,11 @@ QtObject {
     readonly property var glows: [
         { label: "无", value: "none" }, { label: "外发光", value: "soft" },
         { label: "沿边框流光", value: "flow" }, { label: "像素边框", value: "pixel" }
+    ]
+    readonly property var onces: [
+        { label: "无", value: "none" }, { label: "闪光", value: "flash" },
+        { label: "弹跳", value: "bounce" }, { label: "扫光", value: "sweep" },
+        { label: "光圈扩散", value: "ring" }
     ]
     readonly property var loops: [
         { label: "无", value: "none" }, { label: "脉冲 (缩放)", value: "pulse" },
@@ -94,6 +107,13 @@ QtObject {
                 s.loop = t.loop
                 s.loopSeconds = Math.max(0.1, Number(t.loopSeconds) || 1)
             }
+            // One-shot animations, by trigger: ControlView plays each as it
+            // turns up here (the trigger has just started to hold).
+            if (t.once && t.once !== "none") {
+                if (!s.onces) s.onces = []
+                s.onces.push({ key: i, type: t.once, color: t.onceColor || "#ffffff",
+                               seconds: Math.max(0.05, Number(t.onceSeconds) || 0.4) })
+            }
         }
         return s
     }
@@ -101,7 +121,7 @@ QtObject {
     function mergeStyle(group, own) { return Object.assign({}, group || {}, own || {}) }
     function hasStyle(t) {
         return !!t.tint || (t.alpha !== undefined && Number(t.alpha) < 100)
-            || (t.glow && t.glow !== "none") || (t.loop && t.loop !== "none")
+            || (t.glow && t.glow !== "none") || (t.loop && t.loop !== "none") || (t.once && t.once !== "none")
     }
 
     readonly property var motions: [
@@ -177,6 +197,7 @@ QtObject {
         case "lock": return { type: type, show: "locked" }
         case "combat": return { type: type, show: "in" }
         case "skillCast": return { type: type, unit: "main", skillType: "any", skillId: "", duration: 3 }
+        case "barFull": return { type: type, hold: 0.5 }
         default: return { type: "always" }
         }
     }
@@ -202,8 +223,12 @@ QtObject {
     }
     // Bars draw their own progress, texts only show or hide: no effect. A
     // bar's number conditions start as "不比较": the bar only needs the value.
+    // 进度条已满: holds the bar full and flashes it once.
     function makeBarTrigger(type) {
         const c = makeCondition(type)
+        if (type === "barFull")
+            return { conditions: [c], mode: "all", effect: "none", timing: "follow", reverse: false,
+                     range: "full", rangeFrom: 0, rangeTo: 100, once: "flash", onceColor: "#ffffff", onceSeconds: 0.4 }
         if (c.op !== undefined) c.op = "any"
         if (type === "atb") c.measure = "sp"
         if (type === "ultimate") c.measure = "value"
@@ -246,22 +271,75 @@ QtObject {
 
     // A bar: the first active trigger gives the progress (`reverse`
     // applies). No triggers: full. None active: empty, or hidden with
-    // show "active". Show "never": hidden.
-    function runBar(reader, text) {
+    // show "active". Show "never": hidden. `state`: the bar's own object,
+    // kept between calls, for 进度条已满 (barFullState).
+    function runBar(reader, text, state, nowMs) {
         const d = parseTriggers(text)
-        const results = d.list.map(t => evaluateTrigger(reader, t))
         const never = d.show === "never"
-        const style = styleOf(d.list, results)
-        if (d.list.length === 0) return { progress: 1, text: "", stacks: 0, hidden: never, results: results, driving: -1, style: style }
-        const anyActive = results.some(r => r.active)
-        for (let i = 0; i < d.list.length; ++i) {
-            if (!results[i].active || d.list[i].drives === false) continue
-            const p = Math.max(0, Math.min(1, barProgress(d.list[i], results[i])))
-            return { progress: d.list[i].reverse ? 1 - p : p, text: results[i].text || "",
-                     stacks: results[i].stacks || 0, hidden: never, results: results, driving: i, style: style }
+        if (d.list.length === 0) return { progress: 1, text: "", stacks: 0, hidden: never, results: [], driving: -1, style: {}, playing: false }
+        state = state || {}
+        const now = nowMs || Date.now()
+        // Each condition read once, though the triggers are gone through twice.
+        const cache = new Map()
+        const plain = { evaluate: c => { if (!cache.has(c)) cache.set(c, reader.evaluate(c)); return cache.get(c) } }
+        const hasFull = t => t.conditions.some(c => c && c.type === "barFull")
+        // The progress without the 进度条已满 triggers is what fills; then those.
+        const plainResults = d.list.map(t => hasFull(t) ? null : evaluateTrigger(plain, t))
+        const full = barFullState(barDrive(d.list, plainResults), state, now)
+        const withFull = { evaluate: c => c && c.type === "barFull" ? full(c) : plain.evaluate(c) }
+        const results = d.list.map((t, i) => plainResults[i] || evaluateTrigger(withFull, t))
+        const drive = barDrive(d.list, results)
+        const r = drive.index >= 0 ? results[drive.index] : null
+        return { progress: drive.progress, text: r ? r.text || "" : "", stacks: r ? r.stacks || 0 : 0,
+                 hidden: never || (d.show === "active" && !results.some(x => x.active)),
+                 results: results, driving: drive.index, style: styleOf(d.list, results),
+                 // Frames until a 进度条已满 ends on time.
+                 playing: full.holding }
+    }
+    // The first active trigger that gives progress: { index, progress, timeLeft, timed }.
+    // A 进度条已满 trigger gives a full bar.
+    function barDrive(list, results) {
+        for (let i = 0; i < list.length; ++i) {
+            const t = list[i], r = results[i]
+            if (!r || !r.active || t.drives === false) continue
+            if (t.conditions.length > 0 && t.conditions[0].type === "barFull") return { index: i, progress: 1, timeLeft: -1, timed: false }
+            const p = Math.max(0, Math.min(1, barProgress(t, r)))
+            return { index: i, progress: t.reverse ? 1 - p : p, timeLeft: r.timeLeft,
+                     timed: t.conditions.length > 0 && ["combo", "buff", "skillCast"].includes(t.conditions[0].type) }
         }
-        return { progress: 0, text: "", stacks: 0, hidden: never || (d.show === "active" && !anyActive),
-                 results: results, driving: -1, style: style }
+        return { index: -1, progress: 0, timeLeft: -1, timed: false }
+    }
+    // When the bar fills: its progress reaches 99.5%, or a timer filling it
+    // (a cooldown, reversed buff time) runs out. Reads come every 100 ms, so
+    // the last one before a cooldown ends can be short of full; the timer
+    // ending counts too. Fires once, then again only after the bar has
+    // dropped below 97%. Returns a reader for 进度条已满 conditions (met for
+    // their `hold` seconds after firing) with `holding` set.
+    function barFullState(base, state, now) {
+        const filled = base.progress >= 0.995
+        const prev = state.barPrev
+        const ended = !!prev && prev.nearEnd && (base.index !== prev.index || base.progress < prev.progress - 0.2)
+        if (state.barArmed === undefined) {
+            state.barArmed = !filled          // already full when first seen: no flash
+        } else if (state.barArmed && (filled || ended)) {
+            state.barFiredAt = now
+            state.barArmed = false
+        } else if (!state.barArmed && base.progress < 0.97 && !ended) {
+            state.barArmed = true
+        }
+        state.barPrev = { index: base.index, progress: base.progress,
+                          nearEnd: base.timed && base.timeLeft >= 0 && base.timeLeft <= 0.35 && base.progress >= 0.5 }
+        const since = state.barFiredAt !== undefined ? (now - state.barFiredAt) / 1000 : Infinity
+        let holding = false
+        const read = c => {
+            const hold = Math.max(0.05, Number(c.hold) || 0.5)
+            const on = since < hold
+            holding = holding || on
+            return { available: true, active: on, progress: on ? 1 : 0, value: on ? 1 : 0, max: 1, stacks: 0,
+                     timeLeft: on ? hold - since : -1, infinite: false, text: "",
+                     note: on ? "刚填满（还剩 " + (hold - since).toFixed(1) + " 秒）" : filled ? "已满（等待下次填满）" : "未填满" }
+        }
+        return Object.defineProperty(read, "holding", { get: () => holding })
     }
     // A text: shown unless show "never", or "active" and no trigger is active.
     function runText(reader, text) {
@@ -297,7 +375,7 @@ QtObject {
     function parseTextSource(text) {
         let d = null
         try { d = JSON.parse(text || "") } catch (e) {}
-        if (!d || typeof d !== "object" || !d.condition) return makeTextSource("buff")
+        if (!d || typeof d !== "object" || !d.condition) return Object.assign(makeTextSource("buff"), { more: [] })
         return {
             condition: d.condition,
             show: textShows.some(s => s.value === d.show) ? d.show : "auto",

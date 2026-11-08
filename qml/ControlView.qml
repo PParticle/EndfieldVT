@@ -111,7 +111,7 @@ Item {
     readonly property var state: {
         BridgeReader.tick
         return kind === "icon" ? Triggers.run(reader, triggers, runState, Date.now())
-             : kind === "bar" ? Triggers.runBar(reader, triggers)
+             : kind === "bar" ? Triggers.runBar(reader, triggers, runState, Date.now())
              : kind === "text" ? textState()
              : kind === "buffs" ? Object.assign({ effect: "none", progress: 1, startAngle: 0, playing: false, stacks: 0 },
                                                 Triggers.runText(reader, triggers))
@@ -133,10 +133,9 @@ Item {
     readonly property bool hiddenNow: state.hidden === true || (groupState !== null && groupState.hidden === true) || slotEmpty
     readonly property bool shown: !follows || !hiddenNow || selected
     // How it comes and goes (Triggers.parseMotion): its own, else its group's.
-    readonly property var motion: {
-        const own = Triggers.parseTriggers(triggers).motion
-        return Triggers.hasMotion(own) || !group || !group.motion ? own : group.motion
-    }
+    // Its own parsed once per edit, not again whenever the groups change.
+    readonly property var ownMotion: Triggers.parseTriggers(triggers).motion
+    readonly property var motion: Triggers.hasMotion(ownMotion) || !group || !group.motion ? ownMotion : group.motion
     // 1 = fully there, 0 = gone: animated when the triggers show / hide it,
     // by the appear / disappear motion. Arranging (live off): always 1.
     readonly property bool wanted: !follows || !hiddenNow
@@ -193,6 +192,37 @@ Item {
         onRunningChanged: if (!running) object.loopPhase = 0
         onDurationChanged: if (running) restart()
     }
+    // One-shot animations (Triggers.styleOf `onces`): each plays as its
+    // trigger starts to hold, the group's too. Not on what already holds
+    // when the control is made, so opening a config does not set them off.
+    readonly property var onceList: follows ? (state.style && state.style.onces || [])
+                                              .concat((groupState && groupState.style && groupState.style.onces || [])
+                                                      .map(o => Object.assign({}, o, { key: "g" + o.key }))) : []
+    property var onceSeen: ({})
+    property bool onceReady: false
+    property string onceType: "none"
+    property color onceColor: "#ffffff"
+    property real oncePhase: 1         // 0 -> 1 while one plays
+    NumberAnimation {
+        id: onceAnim
+        target: object; property: "oncePhase"
+        from: 0; to: 1
+        onFinished: object.onceType = "none"
+    }
+    onOnceListChanged: {
+        const seen = {}
+        let start = null
+        for (const o of onceList) {
+            seen[o.key] = true
+            if (onceReady && !onceSeen[o.key]) start = o   // the last one wins, as styles do
+        }
+        onceSeen = seen
+        if (!start) return
+        onceType = start.type
+        onceColor = start.color
+        onceAnim.duration = start.seconds * 1000
+        onceAnim.restart()
+    }
     // A moving glow goes round once every 2 s, whatever the loop's own time.
     property real glowPhase: 0
     NumberAnimation on glowPhase {
@@ -244,6 +274,10 @@ Item {
     Component.onCompleted: {
         presence = wanted ? 1 : 0
         syncBuffs()
+        const seen = {}
+        for (const o of onceList) seen[o.key] = true
+        onceSeen = seen
+        onceReady = true
     }
     // Everything a control draws, in one item: a trigger's loop animation
     // (Triggers.loops) turns, scales and shakes it here, so the control's own
@@ -259,7 +293,9 @@ Item {
         readonly property string m: object.motionNow
         readonly property real slide: m === "slide" ? (1 - p) * 24 * object.drawScale : 0
         readonly property string from: object.motion.from
-        scale: (loop === "pulse" ? 1 + 0.12 * wave : 1) * (m === "pop" ? Math.max(0, p) : 1)
+        // 弹跳 (a one-shot): up to 1.15 and back.
+        readonly property real bounce: object.onceType === "bounce" ? 0.15 * Math.sin(Math.PI * object.oncePhase) : 0
+        scale: (loop === "pulse" ? 1 + 0.12 * wave : 1) * (m === "pop" ? Math.max(0, p) : 1) * (1 + bounce)
         rotation: loop === "spin" ? 360 * object.loopPhase : 0
         opacity: object.styleAlpha * (loop === "breathe" ? 1 - 0.75 * wave
                                      : loop === "blink" ? (object.loopPhase < 0.5 ? 1 : 0.1) : 1)
@@ -282,6 +318,9 @@ Item {
             x: -pad; y: -pad
             width: parent.width + 2 * pad; height: parent.height + 2 * pad
             visible: object.glowOn
+            // Painted off the GUI thread: a soft glow blurs on the CPU, and a
+            // group's glow repaints every member at once.
+            renderStrategy: Canvas.Threaded
             antialiasing: true
             property var look: [object.glowType, object.glowColor, object.glowSize, object.drawScale, object.kind,
                                 object.shape, object.shapeAngle, object.iconSize, object.drawProgress, object.drawEffect,
@@ -295,12 +334,13 @@ Item {
             onPhaseChanged: if (visible && object.glowType !== "soft") requestPaint()
             onVisibleChanged: if (visible) requestPaint()
 
-            // Traces the control's outline, `grow` px out from it, in this
-            // canvas; returns its length (for the dashes). Leaves the context
-            // turned as the outline is, for the stroke that follows.
-            function outline(g, grow) {
+            // Traces the control's outline, `grow` px out from it, centered in
+            // a canvas `width` x `height` (this one by default); returns its
+            // length (for the dashes). Leaves the context turned as the
+            // outline is, for the stroke that follows.
+            function outline(g, grow, cw, ch) {
                 const s = object.drawScale
-                const cx = width / 2, cy = height / 2
+                const cx = (cw || width) / 2, cy = (ch || height) / 2
                 g.translate(cx, cy)
                 if (object.kind === "icon") {
                     const full = (Math.min(object.width, object.height) - 16 * s) * object.iconSize / 100 / 2
@@ -432,6 +472,88 @@ Item {
                     g.setLineDash([dash / g.lineWidth, (length - dash) / g.lineWidth])
                     g.lineDashOffset = -glowCanvas.phase * length / g.lineWidth
                     g.stroke()
+                }
+                g.restore()
+            }
+        }
+        // One-shot animations drawn over the control (Triggers.onces):
+        //   flash: its silhouette in onceColor, fading out
+        //   sweep: a bright band crossing it once (along a bar's direction)
+        //   ring:  its outline growing outward and fading
+        // (弹跳 is a scale on `body`.) Above the shapes, under the value labels.
+        Canvas {
+            id: onceCanvas
+            z: 0.5
+            readonly property real pad: 24 * object.drawScale
+            x: -pad; y: -pad
+            width: parent.width + 2 * pad; height: parent.height + 2 * pad
+            visible: ["flash", "sweep", "ring"].includes(object.onceType) && !object.isGroup
+            antialiasing: true
+            readonly property real phase: object.oncePhase
+            onPhaseChanged: if (visible) requestPaint()
+            onVisibleChanged: requestPaint()
+            onPaint: {
+                const g = getContext("2d")
+                g.reset()
+                g.clearRect(0, 0, width, height)
+                if (!visible) return
+                const k = Math.max(0, Math.min(1, phase))
+                const s = object.drawScale
+                const c = object.onceColor
+                const rgba = a => Qt.rgba(c.r, c.g, c.b, a)
+                const isText = object.kind === "text"
+                const font = () => {
+                    g.font = (textItem.font.bold ? "bold " : "") + textItem.font.pixelSize + "px \"" + textItem.font.family + "\""
+                    g.textBaseline = "middle"
+                    g.textAlign = object.textAlign
+                }
+                const tx = object.textAlign === "left" ? pad : object.textAlign === "right" ? width - pad : width / 2
+                // Silhouette: icons with their border, bars their band.
+                const grow = object.kind === "icon" ? 0 : object.kind === "bar" ? object.borderWidth * s / 2 : 0
+                g.save()
+                if (object.onceType === "ring") {
+                    glowCanvas.outline(g, grow + k * 16 * s, width, height)
+                    g.strokeStyle = rgba(1 - k)
+                    g.lineWidth = Math.max(1, 3 * s * (1 - k * 0.6))
+                    g.lineJoin = "round"
+                    g.stroke()
+                    g.restore()
+                    return
+                }
+                let fill
+                if (object.onceType === "flash") {
+                    fill = rgba(0.85 * (1 - k) * (1 - k))
+                } else {
+                    // Across the long side in the outline's own (turned) frame.
+                    const bar = object.kind === "bar" && object.barStyle === "rect"
+                    const dir = object.barDirection
+                    const vertical = bar && (dir === "bottomToTop" || dir === "topToBottom")
+                    const back = bar && (dir === "rightToLeft" || dir === "bottomToTop")
+                    const L = (bar ? (vertical ? object.barThickness : object.barLength) * s
+                               : isText ? textItem.contentWidth : Math.max(object.width, object.height)) + 8 * s
+                    const band = Math.max(8 * s, L * 0.25)
+                    let at = -L / 2 - band + k * (L + 2 * band)
+                    if (back) at = -at
+                    // A text's band runs over its glyphs, wherever they are aligned.
+                    if (isText) at += tx - width / 2 + (object.textAlign === "left" ? textItem.contentWidth / 2
+                                                      : object.textAlign === "right" ? -textItem.contentWidth / 2 : 0)
+                    // Gradient coordinates: the outline is drawn turned and
+                    // centered (text: unturned, in canvas coordinates).
+                    const o = isText ? width / 2 : 0, oy = isText ? height / 2 : 0
+                    const gr = vertical ? g.createLinearGradient(o, oy + at - band, o, oy + at + band)
+                                        : g.createLinearGradient(o + at - band, oy, o + at + band, oy)
+                    gr.addColorStop(0, rgba(0))
+                    gr.addColorStop(0.5, rgba(0.9))
+                    gr.addColorStop(1, rgba(0))
+                    fill = gr
+                }
+                g.fillStyle = fill
+                if (isText) {
+                    font()
+                    g.fillText(textItem.text, tx, height / 2)
+                } else {
+                    glowCanvas.outline(g, grow, width, height)
+                    g.fill()
                 }
                 g.restore()
             }

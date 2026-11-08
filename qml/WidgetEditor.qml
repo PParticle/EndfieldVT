@@ -70,6 +70,8 @@ PageFrame {
     function addTrigger(type) {
         const t = kind === "bar" ? Triggers.makeBarTrigger(type) : kind === "text" || kind === "buffs" ? Triggers.makeTextTrigger(type)
                                                                                   : Triggers.makeTrigger(type)
+        // 进度条已满 goes first: the first active trigger gives the progress.
+        if (type === "barFull") return saveTriggers([t].concat(triggers.list))
         saveTriggers(triggers.list.concat([t]))
     }
     function moveTrigger(i, by) {
@@ -102,7 +104,7 @@ PageFrame {
     property var runState: ({})
     readonly property var triggerState: {
         BridgeReader.tick
-        return kind === "bar" ? Triggers.runBar(reader, value("triggers", ""))
+        return kind === "bar" ? Triggers.runBar(reader, value("triggers", ""), runState, Date.now())
              : kind === "text" || kind === "buffs" ? Triggers.runText(reader, value("triggers", ""))
              : Triggers.run(reader, value("triggers", ""), runState, Date.now())
     }
@@ -634,7 +636,7 @@ PageFrame {
                         bottomPadding: 1
                         background: Rectangle { implicitWidth: 40 * Theme.unit; color: Theme.surface; border.color: Theme.lineStrong }
                         Repeater {
-                            model: Triggers.types
+                            model: editor.kind === "bar" ? Triggers.barTypes : Triggers.types
                             MenuItem {
                                 id: typeItem
                                 required property var modelData

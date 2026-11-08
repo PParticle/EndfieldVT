@@ -48,6 +48,8 @@ Rectangle {
         set("conditions", list)
     }
     readonly property string timing: field("timing", "follow")
+    // A bar's 进度条已满 trigger: it holds the bar full, so no range / reverse.
+    readonly property bool barFull: forBar && conditions.length > 0 && conditions[0].type === "barFull"
     readonly property bool sweep: effect === "clockwise" || effect === "counterclockwise"
 
     color: Theme.base
@@ -192,6 +194,7 @@ Rectangle {
                 ConditionFields {
                     Layout.fillWidth: true
                     labelW: card.labelW
+                    types: card.forBar ? Triggers.barTypes : Triggers.types
                     spec: card.conditions[condBlock.index]
                     onChanged: c => card.setCondition(condBlock.index, c)
                 }
@@ -289,11 +292,14 @@ Rectangle {
         Row_ {
             label: "给出进度"
             visible: card.forBar
-            Toggle { field: "drives"; fallback: true; label: "使用该触发器的数值驱动进度条。" }
+            Toggle {
+                field: "drives"; fallback: true
+                label: card.barFull ? "满足期间进度条保持满格。" : "使用该触发器的数值驱动进度条。"
+            }
         }
         Row_ {
             label: "范围"
-            visible: card.forBar && card.field("drives", true)
+            visible: card.forBar && !card.barFull && card.field("drives", true)
             Choice {
                 field: "range"; fallback: "full"
                 model: [{ label: "0 至上限", value: "full" }, { label: "自定义范围", value: "part" }]
@@ -314,7 +320,7 @@ Rectangle {
             }
         }
         Label {
-            visible: card.forBar && card.field("drives", true) && card.field("range", "full") === "part"
+            visible: card.forBar && !card.barFull && card.field("drives", true) && card.field("range", "full") === "part"
             Layout.fillWidth: true
             Layout.leftMargin: card.labelW
             wrapMode: Text.WordWrap
@@ -326,7 +332,7 @@ Rectangle {
         }
         Row_ {
             label: "反向填充"
-            visible: (card.forBar && card.field("drives", true)) || (card.effect !== "none" && card.timing === "follow")
+            visible: (card.forBar && !card.barFull && card.field("drives", true)) || (card.effect !== "none" && card.timing === "follow")
             AbstractButton {
                 id: rev
                 readonly property bool on: card.field("reverse", false)
@@ -382,7 +388,9 @@ Rectangle {
             wrapMode: Text.WordWrap
             color: Theme.textFaint
             font.pixelSize: Theme.caption
-            text: card.forBar
+            text: card.barFull
+                ? "添加时自动置于列表最前，填满后的这段时间内由它给出满格，再配合下方「一次性动画」做填满提示。"
+                : card.forBar
                 ? "触发满足时，进度条展示对应数值：Buff 与技能展示剩余时间比例，连携技展示冷却比例，其他展示当前值/上限。"
                 : card.timing === "play"
                 ? "状态由不满足变为满足时，" + Triggers.effectLabel(card.effect) + " 在 "
@@ -455,6 +463,31 @@ Rectangle {
                 visible: card.field("loop", "none") !== "none"
                 Layout.leftMargin: Theme.unit
                 text: "单次循环时长。"
+                color: Theme.textFaint
+                font.pixelSize: Theme.caption
+            }
+        }
+        Row_ {
+            label: "一次性动画"
+            Choice { field: "once"; fallback: "none"; model: Triggers.onces }
+            ColorField {
+                id: onceSwatch
+                visible: !["none", "bounce"].includes(card.field("once", "none"))
+                Layout.leftMargin: Theme.gap
+                color: card.field("onceColor", "#ffffff")
+                onClicked: card.colorRequested("onceColor", onceSwatch, card.field("onceColor", "#ffffff"))
+            }
+            NumberField {
+                visible: card.field("once", "none") !== "none"
+                Layout.leftMargin: Theme.unit
+                from: 0.05; to: 10; decimals: 2; unit: "s"
+                value: card.field("onceSeconds", 0.4)
+                onCommitted: v => card.set("onceSeconds", v)
+            }
+            Label {
+                visible: card.field("once", "none") !== "none"
+                Layout.leftMargin: Theme.unit
+                text: "由不满足变为满足时播放一次。"
                 color: Theme.textFaint
                 font.pixelSize: Theme.caption
             }
